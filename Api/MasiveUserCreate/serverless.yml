@@ -1,0 +1,51 @@
+service: MasiveCreateUsers-pn
+
+plugins:
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: ${file(../../commons/credentials.json):stage}
+  region: us-east-1
+  environment:
+    STAGE: ${self:provider.stage}
+    DB_HOST: ${file(../../commons/credentials.json):${self:provider.stage}.dbHost}
+    DB_PORT: ${file(../../commons/credentials.json):${self:provider.stage}.dbPort}
+    DB_PASSWORD: ${file(../../commons/credentials.json):${self:provider.stage}.dbPassword}
+    DB_USER: ${file(../../commons/credentials.json):${self:provider.stage}.dbUser}
+    DB_NAME: ${file(../../commons/credentials.json):${self:provider.stage}.dbName}
+    IDENTITY: ${file(../../commons/credentials.json):${self:provider.stage}.IdentityPoolId}
+    USER_POOL: ${file(../../commons/credentials.json):${self:provider.stage}.userPool}
+    ACCESS_KEY: ${file(../../commons/credentials.json):${self:provider.stage}.accessKeyId}
+    SECRET_KEY: ${file(../../commons/credentials.json):${self:provider.stage}.secretAccessKey}
+
+package:
+  include:
+    - ../../commons/**
+  exclude:
+    - node_modules/**
+
+functions:
+  usersCreate:    
+    handler: handler.create
+    timeout: 30000
+    events:
+      - http:
+          path: createMasiveUsers
+          method: post
+          cors:
+            origin: '*'
+            allowCredentials: true
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+          authorizer:
+              arn: ${file(../../commons/credentials.json):${self:provider.stage}.pool_arn}
+    layers:
+      - arn:${file(../../commons/credentials.json):${self:provider.stage}.layer}
+

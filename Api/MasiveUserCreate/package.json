@@ -1,0 +1,23 @@
+{
+  "name": "courier-api",
+  "version": "1.0.0",
+  "description": "API Services",
+  "main": "handler.js",
+  "author": "Cesar Salazar",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "deploy": "export AWS_PROFILE=traestodo && serverless deploy",
+    "sls-local": "nodemon --exec sls offline"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "aws-sdk": "^2.464.0",
+    "bcryptjs": "^2.4.3",
+    "csv-parser": "^3.0.0",
+    "jwt-decode": "^2.2.0",
+    "moment-timezone": "^0.5.25",
+    "mysql2": "^1.6.5",
+    "serverless-offline": "^13.6.0",
+    "serverless-plugin-warmup": "^4.9.0"
+  }
+}
