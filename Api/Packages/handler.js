@@ -3,7 +3,7 @@ const mysql = require('mysql2/promise')
 const moment = require('moment-timezone')
 const isOffline = process.env['IS_OFFLINE']
 const { dbConfig } = require(`${isOffline ? '../..' : '.'}/commons/dbConfig`)
-let { response, getBody, escapeFields,notifyEmail } = require(`${isOffline ? '../..' : '.'}/commons/utils`)
+let { response, getBody, escapeFields, notifyEmail } = require(`${isOffline ? '../..' : '.'}/commons/utils`)
 let storage = require('./packageStorage')
 const request = require('request')
 const date = moment().tz('America/Guatemala').format('YYYY-MM-DD')
@@ -118,38 +118,36 @@ module.exports.create = async (event, context) => {
     data.ing_date = date
 
     const [checkPackage] = await connection.execute(storage.findByTracking(data))
-      
+
     if (checkPackage.length > 0) {
       //update package
       // actionLog = 'package-update'
-      // console.log('update pkg', data)      
+      // console.log('update pkg', data)
       // const [update] = await connection.execute(storage.put(checkPackage[0], data, date, null))
-      // if (update) await connection.execute(storage.postDetail(data, checkPackage[0].package_id, date))      
-      console.log("package-create - El paquete ya existe ",data)
-      throw new Error('PAQUETE YA EXISTE')           
-    } 
-    else if(data.status === 'Registrado'){
+      // if (update) await connection.execute(storage.postDetail(data, checkPackage[0].package_id, date))
+      console.log('package-create - El paquete ya existe ', data)
+      throw new Error('PAQUETE YA EXISTE')
+    } else if (data.status === 'Registrado') {
       //created by client
       actionLog = 'package-create-by-client'
       console.log('create by client pkg', data)
       const [save] = await connection.execute(storage.createByClient(data))
-      console.log("save object ",save)
-      if(save) {
-        console.log("post detail")
-        const [postDetail_result] = await connection.execute(storage.postDetail(data, save.insertId, date,'Registrado'))
-        console.log("postDetail_result ",postDetail_result)
+      console.log('save object ', save)
+      if (save) {
+        console.log('post detail')
+        const [postDetail_result] = await connection.execute(storage.postDetail(data, save.insertId, date, 'Registrado'))
+        console.log('postDetail_result ', postDetail_result)
       }
-    }    
-    else {
+    } else {
       // create by system
       console.log('create by system pkg', data)
       const [result] = await connection.execute(storage.findMaxPaqueteById())
       const newGuiaId = parseInt(result[0].id) + 1
 
-      const validateGuia = !!newGuiaId            
-      if(!validateGuia){
-        console.log("No se ha creado la guia, intente nuevamente from createPackage >> ",newGuiaId)
-        throw new Error("No se ha creado la guia, intente nuevamente")
+      const validateGuia = !!newGuiaId
+      if (!validateGuia) {
+        console.log('No se ha creado la guia, intente nuevamente from createPackage >> ', newGuiaId)
+        throw new Error('No se ha creado la guia, intente nuevamente')
       }
 
       const [save] = await connection.execute(storage.post(data, newGuiaId))
@@ -190,21 +188,20 @@ module.exports.create = async (event, context) => {
     }
 
     //ledr-logs
-    await createLogsviaSNS(data,actionLog)
+    await createLogsviaSNS(data, actionLog)
 
     return response(200, data, connection)
   } catch (e) {
     // console.log(e)
     // return response(400, e, connection)
     const message = e.message ? e.message : e
-    console.log("error >>",message)
+    console.log('error >>', message)
     return await response(400, { error: message }, connection)
   }
 }
 
 module.exports.update = async (event, context) => {
-
-  console.log("--UPDATE METHOD--");
+  console.log('--UPDATE METHOD--')
 
   const connection = await mysql.createConnection(dbConfig)
   try {
@@ -239,7 +236,7 @@ module.exports.update = async (event, context) => {
     //}
 
     //ledr-logs
-    await createLogsviaSNS(data,"package-update")
+    await createLogsviaSNS(data, 'package-update')
 
     return response(200, data, connection)
   } catch (e) {
@@ -369,11 +366,11 @@ function prepareToSend(user, profile) {
 }
 
 function prepareToSendOnHold(userData) {
-  let MSG = `El paquete del cliente con codigo ${userData.data.client_id} tiene un paquete a ticket. Numero de Tracking: ${userData.data.tracking}`  
+  let MSG = `El paquete del cliente con codigo ${userData.data.client_id} tiene un paquete a ticket. Numero de Tracking: ${userData.data.tracking}`
   const template = {
-    mailList: ["soporte@nowexpresscourier.com","ledr1993@gmail.com"],
+    mailList: ['soporte@nowexpresscourier.com', 'ledr1993@gmail.com'],
     from: 'info@primenowcourier.com',
-    subject: `Paquete en Ticket`,    
+    subject: `Paquete en Ticket`,
     body: {
       Html: {
         Charset: 'UTF-8',
@@ -465,29 +462,29 @@ module.exports.sendSMSTigo = async event => {
     let SMS = ''
     const action = params.profile[0].contact_name
 
-    if(action === 'AdminChargeReport'){
+    if (action === 'AdminChargeReport') {
       SMS = 'Se generó ingreso de carga de paquetería en el sistema.'
-    }else if(params.data.status === 'On Hold'){
+    } else if (params.data.status === 'On Hold') {
       SMS = `NOW EXPRESS su paquete con tracking ${params.data.tracking} a pasado a TICKET, por lo que le solicitamos se comunique a nuestro call center 2376-4699 / 5803-2545.`
-    }else{
+    } else {
       switch (params.data.client_id.charAt(0)) {
         case 'P':
           SMS = params.warehouse
-            ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3hNgehC`
-            : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3hNgehC`            
+            ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
+            : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`
           break
         case 'T':
           SMS = params.warehouse
-            ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3hNgehC`
-            : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3hNgehC`
+            ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
+            : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`
           break
         default:
           SMS = params.warehouse
-            ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3hNgehC`
-            : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3hNgehC`
+            ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
+            : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`
       }
     }
-    
+
     if (SMS.length > 160) {
       SMS = SMS.slice(0, 160)
     }
@@ -521,9 +518,9 @@ module.exports.sendSMSTigo = async event => {
       })
     })
 
-    //SEND SMS TO SUPPORT          
-    
-    if (params.data.status === 'On Hold') {          
+    //SEND SMS TO SUPPORT
+
+    if (params.data.status === 'On Hold') {
       let template = prepareToSendOnHold(params)
       await notifyEmail(AWS, template)
     }
@@ -715,28 +712,27 @@ module.exports.packagesBulkUpdate = async event => {
 
       const sendSMSPromises = smsData.map(data => {
         const params = getSendSMSviaSNSParams(data)
-        console.log('SMS params',params)      
+        console.log('SMS params', params)
         return sendSMSviaSNS(params)
       })
-      
+
       //report SMS
       await Promise.all(sendSMSPromises)
 
       let userData = [
-        {contact_name: "AdminChargeReport",phone: '35757882'},                
-        {contact_name: "AdminChargeReport",phone: '52016022'},
-        {contact_name: "AdminChargeReport",phone: '54978132'},
-        {contact_name: "AdminChargeReport",phone: '32370023'},
-        {contact_name: "AdminChargeReport",phone: '+16095919448'}
+        { contact_name: 'AdminChargeReport', phone: '35757882' },
+        { contact_name: 'AdminChargeReport', phone: '52016022' },
+        { contact_name: 'AdminChargeReport', phone: '54978132' },
+        { contact_name: 'AdminChargeReport', phone: '32370023' },
+        { contact_name: 'AdminChargeReport', phone: '+16095919448' },
       ]
       const sendSMSPromisesReport = userData.map(data => {
-        const params = getSendSMSviaSNSParams(data)     
-        console.log('SMS Report params',params)       
+        const params = getSendSMSviaSNSParams(data)
+        console.log('SMS Report params', params)
         return sendSMSviaSNS(params)
       })
       //report SMS by charge
       await Promise.all(sendSMSPromisesReport)
-
     }
     console.log('Response packages Ids', packagesIds)
     return response(200, { data: packagesIds }, connection)
