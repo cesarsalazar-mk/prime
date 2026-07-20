@@ -93,6 +93,20 @@ module.exports.create = async (event, context) => {
     obj.client_id = _client
     if (save) await connection.execute(storage.createProfile(obj, save[0].insertId))
 
+    if (!event.Records) {
+      try {
+        const sns = new AWS.SNS()
+        await sns
+          .publish({
+            Message: JSON.stringify(data),
+            TopicArn: 'arn:aws:sns:us-east-1:097890312429:users-pn-create-aereo',
+          })
+          .promise()
+      } catch (snsError) {
+        console.log(snsError, 'sns users-pn-create-aereo error')
+      }
+    }
+
     return response(200, data, connection)
   } catch (e) {
     console.log(e)
@@ -358,8 +372,8 @@ const serializeData = (data, update) => {
   dataToSave.name = data.name
   dataToSave.email = data.email
   dataToSave.type = data.type
-  ;(dataToSave.entrega = data.entrega ? data.entrega : 'Entrega en Prime'), //can be Entrega en Traestodo o Entrega a Domicilio
-    (dataToSave.phone = data.phone ? data.phone : '')
+  ;((dataToSave.entrega = data.entrega ? data.entrega : 'Entrega en Prime'), //can be Entrega en Traestodo o Entrega a Domicilio
+    (dataToSave.phone = data.phone ? data.phone : ''))
   dataToSave.nit = data.nit ? data.nit : ''
   dataToSave.main_address = data.main_address ? data.main_address : '' // client address
   dataToSave.message_user = data.message_user ? data.message_user : '' // observations

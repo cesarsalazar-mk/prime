@@ -15,7 +15,7 @@
     "jwt-decode": "^2.2.0",
     "moment-timezone": "^0.5.25",
     "mysql2": "^1.6.5",
-    "serverless-offline": "^4.10.3",
-    "serverless-plugin-warmup": "^4.9.0"
+    "serverless-offline": "^8.8.1",
+    "serverless-plugin-warmup": "^8.4.1"
   }
 }
