@@ -133,7 +133,7 @@ module.exports.exportManifest = async event => {
                   ...r,
                   [k]: row[k],
                   pesoKg: Number(row[k] * poundToKgFactor).toFixed(2),
-                  valorFlete: 2.00 //Number(row[k] * poundToKgFactor * 2).toFixed(2), (Cambio requerido por Pauline Koleter 14/10/2022)
+                  valorFlete: 6.0, //Number(row[k] * poundToKgFactor * 2).toFixed(2), (Cambio requerido por Pauline Koleter 14/10/2022)
                 }
               }
 
