@@ -6,7 +6,7 @@ plugins:
 
 provider:
   name: aws
-  runtime: nodejs12.x
+  runtime: nodejs18.x
   stage: ${file(../../commons/credentials.json):stage}
   region: us-east-1
   environment:
@@ -20,6 +20,12 @@ provider:
     USER_POOL: ${file(../../commons/credentials.json):${self:provider.stage}.userPool}
     ACCESS_KEY: ${file(../../commons/credentials.json):${self:provider.stage}.accessKeyId}
     SECRET_KEY: ${file(../../commons/credentials.json):${self:provider.stage}.secretAccessKey}
+
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - SNS:Publish
+      Resource: '*'
 
 package:
   include:
