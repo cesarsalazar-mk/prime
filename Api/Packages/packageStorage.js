@@ -243,6 +243,36 @@ const updateStatus = (data, package_id, date, status) => {
   return query
 }
 
+const updateVouchers = (data, package_id) => {
+  const voucherBill =
+    data.voucher_bill && data.voucher_bill.length > 5 ? `'${String(data.voucher_bill).replace(/'/g, "''")}'` : 'NULL'
+  const voucherPayment =
+    data.voucher_payment && data.voucher_payment.length > 5
+      ? `'${String(data.voucher_payment).replace(/'/g, "''")}'`
+      : 'NULL'
+  const tracking = String(data.tracking || '').replace(/'/g, "''")
+  const guia = String(data.guia || '').replace(/'/g, "''")
+
+  return `UPDATE paquetes SET
+            voucher_bill = ${voucherBill},
+            voucher_payment = ${voucherPayment}
+          WHERE package_id = ${parseInt(package_id, 10)}
+            AND tracking = '${tracking}'
+            AND guia = '${guia}';`
+}
+
+const findPackageForVoucherUpdate = (package_id, tracking, guia) => {
+  const safeTracking = String(tracking || '').replace(/'/g, "''")
+  const safeGuia = String(guia || '').replace(/'/g, "''")
+
+  return `SELECT package_id, tracking, guia
+          FROM paquetes
+          WHERE package_id = ${parseInt(package_id, 10)}
+            AND tracking = '${safeTracking}'
+            AND guia = '${safeGuia}'
+          LIMIT 1;`
+}
+
 const remove = package_id => {
   const query = `UPDATE paquetes SET status = 'DELETED' AND cancelado = 1 WHERE id = ${parseInt(package_id, 10)};`
   return query
@@ -455,6 +485,8 @@ module.exports = {
   findByTracking,
   getUserInfo,
   updateStatus,
+  updateVouchers,
+  findPackageForVoucherUpdate,
   saveRemaining,
   transfer,
   logPackage,

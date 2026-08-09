@@ -245,6 +245,63 @@ module.exports.update = async (event, context) => {
   }
 }
 
+module.exports.updateVouchers = async event => {
+  const connection = await mysql.createConnection(dbConfig)
+  try {
+    const package_id =
+      event.pathParameters && event.pathParameters.package_id ? JSON.parse(event.pathParameters.package_id) : undefined
+
+    if (package_id === undefined) throw new Error('package_id missing')
+
+    const data = JSON.parse(event.body || '{}')
+
+    if (!data) throw new Error('no data to update')
+    if (!data.tracking) throw new Error('tracking missing')
+    if (!data.guia) throw new Error('guia missing')
+
+    const [packages] = await connection.execute(
+      storage.findPackageForVoucherUpdate(package_id, data.tracking, data.guia)
+    )
+
+    if (!packages || !packages.length) {
+      throw new Error('Package not found for provided package_id, tracking and guia')
+    }
+
+    const [updateResult] = await connection.execute(storage.updateVouchers(data, package_id))
+
+    if (!updateResult || updateResult.affectedRows === 0) {
+      throw new Error('Package vouchers were not updated')
+    }
+
+    await createLogsviaSNS(
+      {
+        package_id,
+        voucher_bill: data.voucher_bill || null,
+        voucher_payment: data.voucher_payment || null,
+        tracking: data.tracking,
+        guia: data.guia,
+        userLog: data.userLog,
+      },
+      'package-voucher-update'
+    )
+
+    return response(
+      200,
+      {
+        package_id,
+        tracking: data.tracking,
+        guia: data.guia,
+        voucher_bill: data.voucher_bill || null,
+        voucher_payment: data.voucher_payment || null,
+      },
+      connection
+    )
+  } catch (e) {
+    console.log(e, 'updateVouchers')
+    return response(400, e, connection)
+  }
+}
+
 module.exports.delete = async (event, context) => {
   const connection = await mysql.createConnection(dbConfig)
   try {
