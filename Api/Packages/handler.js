@@ -245,6 +245,45 @@ module.exports.update = async (event, context) => {
   }
 }
 
+module.exports.updateVouchers = async event => {
+  const connection = await mysql.createConnection(dbConfig)
+  try {
+    const package_id =
+      event.pathParameters && event.pathParameters.package_id ? JSON.parse(event.pathParameters.package_id) : undefined
+
+    if (package_id === undefined) throw new Error('package_id missing')
+
+    const data = JSON.parse(event.body || '{}')
+
+    if (!data) throw new Error('no data to update')
+
+    await connection.execute(storage.updateVouchers(data, package_id))
+    await createLogsviaSNS(
+      {
+        package_id,
+        voucher_bill: data.voucher_bill || null,
+        voucher_payment: data.voucher_payment || null,
+        tracking: data.tracking || null,
+        userLog: data.userLog,
+      },
+      'package-voucher-update'
+    )
+
+    return response(
+      200,
+      {
+        package_id,
+        voucher_bill: data.voucher_bill || null,
+        voucher_payment: data.voucher_payment || null,
+      },
+      connection
+    )
+  } catch (e) {
+    console.log(e, 'updateVouchers')
+    return response(400, e, connection)
+  }
+}
+
 module.exports.delete = async (event, context) => {
   const connection = await mysql.createConnection(dbConfig)
   try {
