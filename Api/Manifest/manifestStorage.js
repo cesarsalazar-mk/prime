@@ -35,12 +35,15 @@ const getPackagesByManifestId = params => {
       : String(params.noNullMaster) === '1'
       ? 'AND (A.master <> "" OR A.master IS NOT NULL) AND (A.poliza <> "" OR A.poliza IS NOT NULL) ORDER BY guia ASC'
       : 'ORDER BY guia ASC'
+  const callCenterColumns = params.callCenter
+    ? `, C.client_id as casillero, C.phone as telefono, C.email as Email, C.main_address as Direccion`
+    : ''
 
   return `SELECT A.package_id, A.tracking, S.name as supplier_name, U.name as client_name, A.weight, A.description,
     A.guia as warehouse, round(A.costo_producto ,2) as costo_producto, A.cif, A.tasa, A.status, A.importe, A.guia, A.cif, A.dai,
     A.master, A.poliza, A.manifest_id, A.total_iva, A.total_a_pagar, A.ing_date, A.pieces, A.tariff_code,
     A.voucher_bill, A.voucher_payment, T.description AS tariff_description, T.id AS tariff_code,
-    T.code AS tariff_nro_partida, CAST((T.tasa * 100) AS SIGNED) AS tariff_tasa,C.nit AS nit,valor_miami, A.costo_producto as costo_producto_b
+    T.code AS tariff_nro_partida, CAST((T.tasa * 100) AS SIGNED) AS tariff_tasa,C.nit AS nit,valor_miami, A.costo_producto as costo_producto_b${callCenterColumns}
     FROM paquetes A
     INNER JOIN clientes C on A.client_id = C.client_id
     INNER JOIN usuarios U on C.id_usuario = U.id 
