@@ -256,14 +256,30 @@ module.exports.updateVouchers = async event => {
     const data = JSON.parse(event.body || '{}')
 
     if (!data) throw new Error('no data to update')
+    if (!data.tracking) throw new Error('tracking missing')
+    if (!data.guia) throw new Error('guia missing')
 
-    await connection.execute(storage.updateVouchers(data, package_id))
+    const [packages] = await connection.execute(
+      storage.findPackageForVoucherUpdate(package_id, data.tracking, data.guia)
+    )
+
+    if (!packages || !packages.length) {
+      throw new Error('Package not found for provided package_id, tracking and guia')
+    }
+
+    const [updateResult] = await connection.execute(storage.updateVouchers(data, package_id))
+
+    if (!updateResult || updateResult.affectedRows === 0) {
+      throw new Error('Package vouchers were not updated')
+    }
+
     await createLogsviaSNS(
       {
         package_id,
         voucher_bill: data.voucher_bill || null,
         voucher_payment: data.voucher_payment || null,
-        tracking: data.tracking || null,
+        tracking: data.tracking,
+        guia: data.guia,
         userLog: data.userLog,
       },
       'package-voucher-update'
@@ -273,6 +289,8 @@ module.exports.updateVouchers = async event => {
       200,
       {
         package_id,
+        tracking: data.tracking,
+        guia: data.guia,
         voucher_bill: data.voucher_bill || null,
         voucher_payment: data.voucher_payment || null,
       },
