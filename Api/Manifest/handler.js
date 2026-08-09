@@ -117,6 +117,7 @@ module.exports.exportManifest = async event => {
     const params = {
       manifest_id: event.pathParameters && event.pathParameters.id ? JSON.parse(event.pathParameters.id) : null,
       includeTariff: event.queryStringParameters && event.queryStringParameters.include_tariff,
+      callCenter: event.queryStringParameters && event.queryStringParameters.call_center,
     }
 
     let [result] = await connection.execute(storage.getPackagesByManifestId(params))
@@ -169,6 +170,17 @@ module.exports.exportManifest = async event => {
       ]
 
       manifestoHeaders.push(...tariffHeaders)
+    }
+
+    if (params.callCenter) {
+      const callCenterHeaders = [
+        { name: 'Casillero', column: 'casillero', width: 12 },
+        { name: 'Telefono', column: 'telefono', width: 15 },
+        { name: 'Email', column: 'Email', width: 30 },
+        { name: 'Direccion', column: 'Direccion', width: 40 },
+      ]
+
+      manifestoHeaders.push(...callCenterHeaders)
     }
 
     let weightHeaders = [
