@@ -390,3 +390,49 @@ module.exports.reconciliation = async event => {
     return response(400, e.message, null)
   }
 }
+
+module.exports.getCreditCardFee = async () => {
+  const connection = await mysql.createConnection(dbConfig)
+  try {
+    const [rows] = await connection.execute(storage.getCreditCardFee())
+    const creditCardFeePercent = rows[0] ? parseFloat(rows[0].setting_value) : null
+
+    return response(
+      200,
+      {
+        creditCardFeePercent,
+        updated_at: rows[0] ? rows[0].updated_at : null,
+        updated_by: rows[0] ? rows[0].updated_by : null,
+      },
+      connection
+    )
+  } catch (e) {
+    console.log(e)
+    return response(400, e.message, connection)
+  }
+}
+
+module.exports.updateCreditCardFee = async event => {
+  const connection = await mysql.createConnection(dbConfig)
+  try {
+    const data = JSON.parse(event.body)
+    const creditCardFeePercent = data.creditCardFeePercent
+
+    if (creditCardFeePercent === null || creditCardFeePercent === undefined || creditCardFeePercent === '') {
+      throw Error('creditCardFeePercent is required')
+    }
+
+    const fee = parseFloat(creditCardFeePercent)
+    if (isNaN(fee) || fee < 0 || fee > 100) {
+      throw Error('creditCardFeePercent must be a number between 0 and 100')
+    }
+
+    const date = moment().tz('America/Guatemala').format('YYYY-MM-DD HH:mm:ss')
+    await connection.execute(storage.upsertCreditCardFee(fee, date, data.updated_by))
+
+    return response(200, { creditCardFeePercent: fee }, connection)
+  } catch (e) {
+    console.log(e)
+    return response(400, e.message, connection)
+  }
+}

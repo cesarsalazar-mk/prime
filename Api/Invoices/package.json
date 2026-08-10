@@ -17,10 +17,12 @@
     "mysql2": "^1.6.5",
     "request": "^2.88.0",
     "save": "^2.4.0",
-    "serverless-offline": "^8.8.1",
     "soap": "^0.32.0",
     "uuid": "^3.3.2",
     "xml2js": "^0.4.23"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "serverless-offline": "^8.8.1",
+    "nodemon": "^3.1.9"
+  }
 }

@@ -393,6 +393,25 @@ const getPackagesDescription = (items) => {
   return query
 }
 
+const CREDIT_CARD_FEE_KEY = 'credit_card_fee'
+
+const getCreditCardFee = () => {
+  const query = `SELECT setting_key, setting_value, updated_at, updated_by
+                 FROM settings
+                 WHERE setting_key = '${CREDIT_CARD_FEE_KEY}'`
+  return query
+}
+
+const upsertCreditCardFee = (value, date, updatedBy) => {
+  const query = `INSERT INTO settings (setting_key, setting_value, updated_at, updated_by)
+                 VALUES ('${CREDIT_CARD_FEE_KEY}', '${value}', '${date}', '${updatedBy || ''}')
+                 ON DUPLICATE KEY UPDATE
+                   setting_value = '${value}',
+                   updated_at = '${date}',
+                   updated_by = '${updatedBy || ''}'`
+  return query
+}
+
 module.exports = {
   post: create,
   isEmpty,
@@ -420,5 +439,7 @@ module.exports = {
   revertPackage,
   revertConciliation,
   stores,
-  getPackagesDescription
+  getPackagesDescription,
+  getCreditCardFee,
+  upsertCreditCardFee,
 }
