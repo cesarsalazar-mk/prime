@@ -173,13 +173,13 @@ module.exports.exportManifest = async event => {
     }
 
     if (params.callCenter) {
-      manifestoHeaders = [
+      const callCenterHeaders = [
         { name: 'Casillero', column: 'casillero', width: 12 },
-        { name: 'Consignatario', column: 'client_name', width: 43.33 },
         { name: 'Telefono', column: 'telefono', width: 15 },
-        { name: 'Direccion', column: 'Direccion', width: 40 },
         { name: 'Email', column: 'Email', width: 30 },
+        { name: 'Direccion', column: 'Direccion', width: 40 },
       ]
+      manifestoHeaders.push(...callCenterHeaders)
     }
 
     let weightHeaders = [
