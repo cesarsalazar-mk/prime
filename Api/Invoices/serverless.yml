@@ -281,12 +281,12 @@ functions:
     layers:
       - arn:${file(../../commons/credentials.json):${self:provider.stage}.layer}
 
-  getCreditCardFee:
-    handler: handler.getCreditCardFee
+  getSeguroFee:
+    handler: handler.getSeguroFee
     timeout: 30
     events:
       - http:
-          path: settings/credit-card-fee
+          path: settings/seguro-fee
           method: get
           cors:
             origin: '*'
@@ -303,12 +303,12 @@ functions:
     layers:
       - arn:${file(../../commons/credentials.json):${self:provider.stage}.layer}
 
-  updateCreditCardFee:
-    handler: handler.updateCreditCardFee
+  updateSeguroFee:
+    handler: handler.updateSeguroFee
     timeout: 30
     events:
       - http:
-          path: settings/credit-card-fee
+          path: settings/seguro-fee
           method: put
           cors:
             origin: '*'

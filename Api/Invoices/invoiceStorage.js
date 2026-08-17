@@ -393,20 +393,31 @@ const getPackagesDescription = (items) => {
   return query
 }
 
-const CREDIT_CARD_FEE_KEY = 'credit_card_fee'
+const SEGURO_FEE_KEY = 'seguro_fee'
+const SEGURO_FEE_ENABLED_KEY = 'seguro_fee_enabled'
 
-const getCreditCardFee = () => {
+const getSeguroFee = () => {
   const query = `SELECT setting_key, setting_value, updated_at, updated_by
                  FROM settings
-                 WHERE setting_key = '${CREDIT_CARD_FEE_KEY}'`
+                 WHERE setting_key IN ('${SEGURO_FEE_KEY}', '${SEGURO_FEE_ENABLED_KEY}')`
   return query
 }
 
-const upsertCreditCardFee = (value, date, updatedBy) => {
+const upsertSeguroFee = (value, date, updatedBy) => {
   const query = `INSERT INTO settings (setting_key, setting_value, updated_at, updated_by)
-                 VALUES ('${CREDIT_CARD_FEE_KEY}', '${value}', '${date}', '${updatedBy || ''}')
+                 VALUES ('${SEGURO_FEE_KEY}', '${value}', '${date}', '${updatedBy || ''}')
                  ON DUPLICATE KEY UPDATE
                    setting_value = '${value}',
+                   updated_at = '${date}',
+                   updated_by = '${updatedBy || ''}'`
+  return query
+}
+
+const upsertSeguroFeeEnabled = (enabled, date, updatedBy) => {
+  const query = `INSERT INTO settings (setting_key, setting_value, updated_at, updated_by)
+                 VALUES ('${SEGURO_FEE_ENABLED_KEY}', '${enabled ? '1' : '0'}', '${date}', '${updatedBy || ''}')
+                 ON DUPLICATE KEY UPDATE
+                   setting_value = '${enabled ? '1' : '0'}',
                    updated_at = '${date}',
                    updated_by = '${updatedBy || ''}'`
   return query
@@ -440,6 +451,7 @@ module.exports = {
   revertConciliation,
   stores,
   getPackagesDescription,
-  getCreditCardFee,
-  upsertCreditCardFee,
+  getSeguroFee,
+  upsertSeguroFee,
+  upsertSeguroFeeEnabled,
 }

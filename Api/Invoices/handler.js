@@ -121,14 +121,14 @@ module.exports.documents = async event => {
     }
 
     const [documents] = await connection.execute(storage.get(params))
-    
+
     //get packages descriptions
-    let packagesList = documents.map(element => element.observations.replace('Guias # ','').replace(/\s/g, '').slice(0, -1).split(','))
+    let packagesList = documents.map(element => element.observations.replace('Guias # ', '').replace(/\s/g, '').slice(0, -1).split(','))
     let packagesIds = [...new Set([].concat.apply([], packagesList))]
     let packagesIdsString = packagesIds.map(element => `'${element}'`)
     const [packagesDescriptions] = await connection.execute(storage.getPackagesDescription(packagesIdsString))
-    
-    documents.forEach(element=>{      
+
+    documents.forEach(element => {
       element.descripcionPaquetes = packagesDescriptions.filter(el => element.observations.includes(el.guia))
     })
 
@@ -246,8 +246,8 @@ module.exports.annulSNS = async event => {
       ? JSON.parse(event.body)
       : event.body
     : event.Records
-    ? JSON.parse(event.Records[0].Sns.Message)
-    : null
+      ? JSON.parse(event.Records[0].Sns.Message)
+      : null
   console.log(body)
   try {
     const date = moment().tz('America/Guatemala').format('YYYY-MM-DD hh:mm:ss')
@@ -275,39 +275,37 @@ module.exports.annulSNS = async event => {
 
     //validate if exists an error
     const validateResponse = serializerResponse.hasOwnProperty('error')
-    
-    if(!!validateResponse && serializerResponse.error != null){      
-      
-      console.log("ERROR >>> ",serializerResponse)
-      
+
+    if (!!validateResponse && serializerResponse.error != null) {
+      console.log('ERROR >>> ', serializerResponse)
+
       let alreadyAnnul = serializerResponse.error['_']
 
-      if(alreadyAnnul == "EL DOCUMENTO YA ESTA ANULÁDO"){        
+      if (alreadyAnnul == 'EL DOCUMENTO YA ESTA ANULÁDO') {
         await connection.execute(storage.updatedToLog(serializerResponse, date, body.id))
         await connection.execute(storage.revertPackage(body.id))
         await connection.execute(storage.revertConciliation(body.id, date))
-        console.log("EL DOCUMENTO YA ESTA ANULÁDO")
+        console.log('EL DOCUMENTO YA ESTA ANULÁDO')
         return response(400, { message: 'EL DOCUMENTO YA ESTA ANULÁDO' }, connection)
-      } 
+      }
 
-      throw new Error(`Error on invoice validate`)      
+      throw new Error(`Error on invoice validate`)
     }
 
     //update packages info
     await connection.execute(storage.updatedToLog(serializerResponse, date, body.id))
     await connection.execute(storage.revertPackage(body.id))
     await connection.execute(storage.revertConciliation(body.id, date))
-    
+
     console.log('** all updated **')
     delete serializerResponse.pdf
-    delete serializerResponse.xml    
+    delete serializerResponse.xml
     console.log('finished', serializerResponse)
-    
-    return response(200, serializerResponse, connection)
 
+    return response(200, serializerResponse, connection)
   } catch (e) {
     const connection = await mysql.createConnection(dbConfig)
-    await connection.execute(storage.invoiceAnnul('', '', body.id, 5))    
+    await connection.execute(storage.invoiceAnnul('', '', body.id, 5))
     console.log(e, 'annulSNS-ERROR')
     return response(400, { message: 'Error' }, connection)
   }
@@ -390,19 +388,22 @@ module.exports.reconciliation = async event => {
     return response(400, e.message, null)
   }
 }
+ 
 
-module.exports.getCreditCardFee = async () => {
+module.exports.getSeguroFee = async () => {
   const connection = await mysql.createConnection(dbConfig)
   try {
-    const [rows] = await connection.execute(storage.getCreditCardFee())
-    const creditCardFeePercent = rows[0] ? parseFloat(rows[0].setting_value) : null
+    const [rows] = await connection.execute(storage.getSeguroFee())
+    const amountRow = rows.find(r => r.setting_key === 'seguro_fee')
+    const enabledRow = rows.find(r => r.setting_key === 'seguro_fee_enabled')
 
     return response(
       200,
       {
-        creditCardFeePercent,
-        updated_at: rows[0] ? rows[0].updated_at : null,
-        updated_by: rows[0] ? rows[0].updated_by : null,
+        seguroFeeAmount: amountRow ? parseFloat(amountRow.setting_value) : 0,
+        seguroFeeEnabled: enabledRow ? enabledRow.setting_value === '1' : false,
+        updated_at: amountRow ? amountRow.updated_at : null,
+        updated_by: amountRow ? amountRow.updated_by : null,
       },
       connection
     )
@@ -412,25 +413,27 @@ module.exports.getCreditCardFee = async () => {
   }
 }
 
-module.exports.updateCreditCardFee = async event => {
+module.exports.updateSeguroFee = async event => {
   const connection = await mysql.createConnection(dbConfig)
   try {
     const data = JSON.parse(event.body)
-    const creditCardFeePercent = data.creditCardFeePercent
+    const seguroFeeAmount = data.seguroFeeAmount
+    const seguroFeeEnabled = !!data.seguroFeeEnabled
 
-    if (creditCardFeePercent === null || creditCardFeePercent === undefined || creditCardFeePercent === '') {
-      throw Error('creditCardFeePercent is required')
+    if (seguroFeeAmount === null || seguroFeeAmount === undefined || seguroFeeAmount === '') {
+      throw Error('seguroFeeAmount is required')
     }
 
-    const fee = parseFloat(creditCardFeePercent)
-    if (isNaN(fee) || fee < 0 || fee > 100) {
-      throw Error('creditCardFeePercent must be a number between 0 and 100')
+    const fee = parseFloat(seguroFeeAmount)
+    if (isNaN(fee) || fee < 0) {
+      throw Error('seguroFeeAmount must be a number greater than or equal to 0')
     }
 
     const date = moment().tz('America/Guatemala').format('YYYY-MM-DD HH:mm:ss')
-    await connection.execute(storage.upsertCreditCardFee(fee, date, data.updated_by))
+    await connection.execute(storage.upsertSeguroFee(fee, date, data.updated_by))
+    await connection.execute(storage.upsertSeguroFeeEnabled(seguroFeeEnabled, date, data.updated_by))
 
-    return response(200, { creditCardFeePercent: fee }, connection)
+    return response(200, { seguroFeeAmount: fee, seguroFeeEnabled }, connection)
   } catch (e) {
     console.log(e)
     return response(400, e.message, connection)
