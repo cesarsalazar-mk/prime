@@ -4,7 +4,7 @@ const moment = require('moment-timezone')
 const isOffline = process.env['IS_OFFLINE']
 const { dbConfig } = require(`${isOffline ? '../..' : '.'}/commons/dbConfig`)
 const { response, wakeUpLambda } = require(`${isOffline ? '../..' : '.'}/commons/utils`)
-const { buildXML, generateCorrelative, buildXMLAllInclude } = require('./functions')
+const { buildXML, generateCorrelative, buildXMLAllInclude, buildDevInvoicePdf } = require('./functions')
 const xml2js = require('xml2js')
 const SOAP = require('soap')
 const AWS = require('aws-sdk')
@@ -51,12 +51,44 @@ module.exports.create = async (event, context) => {
     }
     const log = await connection.execute(storage.saveToLog(invoiceData, date, create.insertId))
     if (!log[0].insertId) throw Error('Error creating log')
-    console.log('making request')
-    const xml_response = await storage.makeRequestSoap(SOAP, process.env['URL_DEV_FACT'], invoiceData)
-    console.log('finishing request')
-    const json = await storage.parseToJson(xml_response.Respuesta, xml2js, date)
 
-    if (json.Errores) throw Error(JSON.stringify(json.Errores.Error))
+    const bypassEcofactura = process.env.STAGE === 'dev' || Boolean(isOffline)
+    let serializerResponse
+
+    if (bypassEcofactura) {
+      console.log('DEV: skipping Ecofactura SAT request')
+      const issuedAt = moment().tz('America/Guatemala').format('YYYY-MM-DD HH:mm:ss')
+      serializerResponse = {
+        create_at: issuedAt,
+        certification_date: issuedAt,
+        autorization_number: `DEV-${create.insertId}`,
+        sat_number: `DEV-${correlative || create.insertId}`,
+        error: null,
+        pdf: buildDevInvoicePdf(data, {
+          create_at: issuedAt,
+          autorization_number: `DEV-${create.insertId}`,
+          sat_number: `DEV-${correlative || create.insertId}`,
+        }),
+        xml: 'DEV_BYPASS',
+      }
+    } else {
+      console.log('making request')
+      const xml_response = await storage.makeRequestSoap(SOAP, process.env['URL_DEV_FACT'], invoiceData)
+      console.log('finishing request')
+      const json = await storage.parseToJson(xml_response.Respuesta, xml2js, date)
+
+      if (json.Errores) throw Error(JSON.stringify(json.Errores.Error))
+
+      serializerResponse = {
+        create_at: json.DTE ? json.DTE.FechaEmision[0] : null,
+        certification_date: json.DTE.FechaCertificacion ? json.DTE.FechaCertificacion[0] : null,
+        autorization_number: json.DTE.NumeroAutorizacion ? json.DTE.NumeroAutorizacion[0] : null,
+        sat_number: json.DTE.Numero ? json.DTE.Numero[0] : null,
+        error: json.DTE.Error ? json.DTE.Error[0] : null,
+        pdf: json.DTE.Pdf[0],
+        xml: json.DTE.Xml[0],
+      }
+    }
 
     const date_download = moment().tz('America/Guatemala').format('YYYY-MM-DD')
     //create detail
@@ -70,16 +102,6 @@ module.exports.create = async (event, context) => {
           return detail
         })
       )
-    }
-
-    let serializerResponse = {
-      create_at: json.DTE ? json.DTE.FechaEmision[0] : null,
-      certification_date: json.DTE.FechaCertificacion ? json.DTE.FechaCertificacion[0] : null,
-      autorization_number: json.DTE.NumeroAutorizacion ? json.DTE.NumeroAutorizacion[0] : null,
-      sat_number: json.DTE.Numero ? json.DTE.Numero[0] : null,
-      error: json.DTE.Error ? json.DTE.Error[0] : null,
-      pdf: json.DTE.Pdf[0],
-      xml: json.DTE.Xml[0],
     }
     //console.log(serializerResponse, 'serializerResponse')
 
@@ -417,7 +439,7 @@ module.exports.updateSeguroFee = async event => {
   const connection = await mysql.createConnection(dbConfig)
   try {
     const data = JSON.parse(event.body)
-    const seguroFeeAmount = data.seguroFeeAmount
+    const seguroFeeAmount = data.seguroFeeAmount != null ? data.seguroFeeAmount : data.seguroFeePercent
     const seguroFeeEnabled = !!data.seguroFeeEnabled
 
     if (seguroFeeAmount === null || seguroFeeAmount === undefined || seguroFeeAmount === '') {
@@ -425,8 +447,8 @@ module.exports.updateSeguroFee = async event => {
     }
 
     const fee = parseFloat(seguroFeeAmount)
-    if (isNaN(fee) || fee < 0) {
-      throw Error('seguroFeeAmount must be a number greater than or equal to 0')
+    if (isNaN(fee) || fee < 0 || fee > 100) {
+      throw Error('seguroFeeAmount must be a number between 0 and 100')
     }
 
     const date = moment().tz('America/Guatemala').format('YYYY-MM-DD HH:mm:ss')

@@ -159,8 +159,81 @@ const calc = (theform) => {
   rounded.value = with2Decimals
 }
 
+const money = value => accounting.toFixed(Number(value) || 0, 2)
+
+const pdfEscape = text =>
+  String(text == null ? '' : text)
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/[^\x20-\x7E]/g, ' ')
+
+const pdfLine = text => `0 -16 Td (${pdfEscape(text)}) Tj\n`
+
+const buildDevInvoicePdf = (data, sat) => {
+  const items = data.items || []
+  const discount = Number(data.discount) || 0
+  const seguro = Number(data.seguro) || 0
+  const total = Number(data.total) || 0
+
+  let content = 'BT\n/F1 14 Tf\n50 760 Td\n'
+  content += `(*** FACTURA DE PRUEBA DEV ***) Tj\n`
+  content += `/F1 10 Tf\n`
+  content += pdfLine('No es un DTE certificado. Ecofactura esta deshabilitado en este ambiente.')
+  content += pdfLine(`Serie: ${sat.sat_number}`)
+  content += pdfLine(`Autorizacion: ${sat.autorization_number}`)
+  content += pdfLine(`Fecha: ${sat.create_at}`)
+  content += pdfLine(`Cliente: ${data.client_name || data.client_id || ''}`)
+  content += pdfLine(`NIT: ${data.nit || ''}`)
+  content += pdfLine(`Observaciones: ${data.observations || ''}`)
+  content += pdfLine('')
+  content += pdfLine('Descripcion                         Cant     Monto')
+  content += pdfLine('------------------------------------------------')
+
+  items.forEach(item => {
+    const description = String(item.description || '').slice(0, 32).padEnd(32, ' ')
+    const qty = String(item.qty == null ? 1 : item.qty).padStart(4, ' ')
+    const amount = money(item.amount).padStart(10, ' ')
+    content += pdfLine(`${description} ${qty} ${amount}`)
+  })
+
+  content += pdfLine('------------------------------------------------')
+  content += pdfLine(`Subtotal: Q ${money(data.sub_total)}`)
+  content += pdfLine(`Descuento: Q ${money(discount)}`)
+  content += pdfLine(`Seguro: Q ${money(seguro)}`)
+  content += pdfLine(`Total: Q ${money(total - discount)}`)
+  content += 'ET\n'
+
+  const stream = Buffer.from(content, 'latin1')
+  const objects = [
+    '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n',
+    '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n',
+    '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj\n',
+    `4 0 obj << /Length ${stream.length} >> stream\n${content}endstream\nendobj\n`,
+    '5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Courier >> endobj\n',
+  ]
+
+  let pdf = '%PDF-1.1\n'
+  const offsets = [0]
+  objects.forEach(object => {
+    offsets.push(Buffer.byteLength(pdf, 'latin1'))
+    pdf += object
+  })
+
+  const xrefStart = Buffer.byteLength(pdf, 'latin1')
+  pdf += `xref\n0 ${objects.length + 1}\n`
+  pdf += '0000000000 65535 f \n'
+  for (let i = 1; i < offsets.length; i++) {
+    pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`
+  }
+  pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`
+
+  return Buffer.from(pdf, 'latin1').toString('base64')
+}
+
 module.exports = {
   buildXML,
   generateCorrelative,
-  buildXMLAllInclude
+  buildXMLAllInclude,
+  buildDevInvoicePdf,
 }
