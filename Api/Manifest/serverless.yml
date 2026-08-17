@@ -167,3 +167,83 @@ functions:
             arn: ${file(../../commons/credentials.json):${self:provider.stage}.pool_arn}
   #    layers:
   #      - arn:${file(../../commons/credentials.json):${self:provider.stage}.layer}
+
+  manifestLoadPreview:
+    handler: loadHandler.previewManifestLoad
+    timeout: 30
+    events:
+      - http:
+          path: manifest/load/preview
+          method: post
+          cors:
+            origin: '*'
+            allowCredentials: true
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+          authorizer:
+            arn: ${file(../../commons/credentials.json):${self:provider.stage}.pool_arn}
+
+  manifestLoadConfirm:
+    handler: loadHandler.confirmManifestLoad
+    timeout: 60
+    events:
+      - http:
+          path: manifest/load/confirm
+          method: post
+          cors:
+            origin: '*'
+            allowCredentials: true
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+          authorizer:
+            arn: ${file(../../commons/credentials.json):${self:provider.stage}.pool_arn}
+
+  manifestLoadList:
+    handler: loadHandler.listManifestLoads
+    timeout: 30
+    events:
+      - http:
+          path: manifest/load
+          method: get
+          cors:
+            origin: '*'
+            allowCredentials: true
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+          authorizer:
+            arn: ${file(../../commons/credentials.json):${self:provider.stage}.pool_arn}
+
+  manifestLoadDetail:
+    handler: loadHandler.getManifestLoadDetail
+    timeout: 30
+    events:
+      - http:
+          path: manifest/load/{id}
+          method: get
+          cors:
+            origin: '*'
+            allowCredentials: true
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+          authorizer:
+            arn: ${file(../../commons/credentials.json):${self:provider.stage}.pool_arn}

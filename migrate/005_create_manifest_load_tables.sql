@@ -1,0 +1,47 @@
+CREATE TABLE IF NOT EXISTS manifest_load (
+  id INT NOT NULL AUTO_INCREMENT,
+  declaration_number VARCHAR(100) NOT NULL,
+  master VARCHAR(100) NOT NULL,
+  declaration_date VARCHAR(50) NULL,
+  xml_count INT NOT NULL DEFAULT 0,
+  found_count INT NOT NULL DEFAULT 0,
+  updated_count INT NOT NULL DEFAULT 0,
+  not_found_count INT NOT NULL DEFAULT 0,
+  invalid_count INT NOT NULL DEFAULT 0,
+  ambiguous_count INT NOT NULL DEFAULT 0,
+  skipped_count INT NOT NULL DEFAULT 0,
+  status VARCHAR(30) NOT NULL,
+  created_by VARCHAR(150) NULL,
+  error_message TEXT NULL,
+  create_at DATETIME NOT NULL,
+  PRIMARY KEY (id),
+  INDEX idx_manifest_load_declaration (declaration_number, master),
+  INDEX idx_manifest_load_create_at (create_at)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS manifest_load_detail (
+  id INT NOT NULL AUTO_INCREMENT,
+  load_id INT NOT NULL,
+  guia VARCHAR(50) NULL,
+  package_id INT NULL,
+  description TEXT NULL,
+  costo_producto DECIMAL(12,2) NULL,
+  tariff_code_xml VARCHAR(50) NULL,
+  tariff_id INT NULL,
+  tasa DECIMAL(10,4) NULL,
+  dai DECIMAL(12,2) NULL,
+  dai_xml DECIMAL(12,2) NULL,
+  result VARCHAR(30) NOT NULL,
+  error_description TEXT NULL,
+  previous_costo_producto DECIMAL(12,2) NULL,
+  previous_tariff_code INT NULL,
+  previous_tasa DECIMAL(10,4) NULL,
+  previous_dai DECIMAL(12,2) NULL,
+  create_at DATETIME NOT NULL,
+  PRIMARY KEY (id),
+  INDEX idx_manifest_load_detail_load (load_id),
+  INDEX idx_manifest_load_detail_package (package_id),
+  INDEX idx_manifest_load_detail_guia (guia),
+  CONSTRAINT fk_manifest_load_detail_load
+    FOREIGN KEY (load_id) REFERENCES manifest_load (id)
+) ENGINE=InnoDB;
