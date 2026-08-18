@@ -40,7 +40,8 @@ const findPackagesByGuias = guias => `
     p.importe,
     p.total_a_pagar,
     p.manifest_id,
-    m.status AS manifest_status
+    m.status AS manifest_status,
+    m.description AS manifest_description
   FROM paquetes p
   LEFT JOIN manifest m ON m.manifest_id = p.manifest_id
   WHERE p.guia IN (${sqlInStrings(guias)})
@@ -76,6 +77,13 @@ const insertLoad = data => `
     status,
     created_by,
     error_message,
+    tipo_de_cambio,
+    sub_total,
+    monto_iva,
+    monto_total,
+    resultado_analisis_riesgo,
+    manifest_id,
+    manifest_description,
     create_at
   ) VALUES (
     ${sqlString(data.declaration_number)},
@@ -91,6 +99,13 @@ const insertLoad = data => `
     ${sqlString(data.status)},
     ${sqlString(data.created_by)},
     ${sqlString(data.error_message)},
+    ${sqlNumber(data.tipo_de_cambio)},
+    ${sqlNumber(data.sub_total)},
+    ${sqlNumber(data.monto_iva)},
+    ${sqlNumber(data.monto_total)},
+    ${sqlString(data.resultado_analisis_riesgo)},
+    ${sqlString(data.manifest_id)},
+    ${sqlString(data.manifest_description)},
     ${sqlString(data.create_at)}
   )
 `
@@ -109,6 +124,8 @@ const insertLoadDetail = (loadId, item, createAt) => `
     dai_xml,
     result,
     error_description,
+    analisis_riesgo,
+    manifest_id,
     previous_costo_producto,
     previous_tariff_code,
     previous_tasa,
@@ -127,6 +144,8 @@ const insertLoadDetail = (loadId, item, createAt) => `
     ${sqlNumber(item.dai_xml)},
     ${sqlString(item.result)},
     ${sqlString(item.error_description)},
+    ${sqlString(item.analisis_riesgo)},
+    ${sqlNumber(item.manifest_id)},
     ${sqlNumber(item.previous_costo_producto)},
     ${sqlNumber(item.previous_tariff_code)},
     ${sqlNumber(item.previous_tasa)},
@@ -219,6 +238,36 @@ const getSMSData = packageIds => `
   WHERE p.package_id IN (${packageIds.join(', ')})
 `
 
+const affectedManifestDescriptionsSubquery = alias => `
+    COALESCE(
+      NULLIF(${alias}.manifest_description, ''),
+      (
+        SELECT GROUP_CONCAT(DISTINCT m.description ORDER BY m.description SEPARATOR ', ')
+        FROM manifest_load_detail d
+        INNER JOIN paquetes p ON p.package_id = d.package_id
+        INNER JOIN manifest m ON m.manifest_id = p.manifest_id
+        WHERE d.load_id = ${alias}.id
+          AND d.result IN ('UPDATED', 'XML_RATE')
+          AND m.description IS NOT NULL
+          AND m.description <> ''
+      )
+    )
+`
+
+const affectedManifestIdsSubquery = alias => `
+    COALESCE(
+      NULLIF(${alias}.manifest_id, ''),
+      (
+        SELECT GROUP_CONCAT(DISTINCT p.manifest_id ORDER BY p.manifest_id SEPARATOR ', ')
+        FROM manifest_load_detail d
+        INNER JOIN paquetes p ON p.package_id = d.package_id
+        WHERE d.load_id = ${alias}.id
+          AND d.result IN ('UPDATED', 'XML_RATE')
+          AND p.manifest_id IS NOT NULL
+      )
+    )
+`
+
 const listLoads = () => `
   SELECT
     id,
@@ -235,6 +284,13 @@ const listLoads = () => `
     status,
     created_by,
     error_message,
+    tipo_de_cambio,
+    sub_total,
+    monto_iva,
+    monto_total,
+    resultado_analisis_riesgo,
+    ${affectedManifestIdsSubquery('manifest_load')} AS manifest_id,
+    ${affectedManifestDescriptionsSubquery('manifest_load')} AS manifest_description,
     create_at
   FROM manifest_load
   ORDER BY id DESC
@@ -257,6 +313,13 @@ const getLoadById = id => `
     status,
     created_by,
     error_message,
+    tipo_de_cambio,
+    sub_total,
+    monto_iva,
+    monto_total,
+    resultado_analisis_riesgo,
+    ${affectedManifestIdsSubquery('manifest_load')} AS manifest_id,
+    ${affectedManifestDescriptionsSubquery('manifest_load')} AS manifest_description,
     create_at
   FROM manifest_load
   WHERE id = ${sqlNumber(id)}
@@ -264,27 +327,32 @@ const getLoadById = id => `
 
 const getLoadDetails = id => `
   SELECT
-    id,
-    load_id,
-    guia,
-    package_id,
-    description,
-    costo_producto,
-    tariff_code_xml,
-    tariff_id,
-    tasa,
-    dai,
-    dai_xml,
-    result,
-    error_description,
-    previous_costo_producto,
-    previous_tariff_code,
-    previous_tasa,
-    previous_dai,
-    create_at
-  FROM manifest_load_detail
-  WHERE load_id = ${sqlNumber(id)}
-  ORDER BY id ASC
+    d.id,
+    d.load_id,
+    d.guia,
+    d.package_id,
+    d.description,
+    d.costo_producto,
+    d.tariff_code_xml,
+    d.tariff_id,
+    d.tasa,
+    d.dai,
+    d.dai_xml,
+    d.result,
+    d.error_description,
+    d.analisis_riesgo,
+    COALESCE(d.manifest_id, p.manifest_id) AS manifest_id,
+    m.description AS manifest_description,
+    d.previous_costo_producto,
+    d.previous_tariff_code,
+    d.previous_tasa,
+    d.previous_dai,
+    d.create_at
+  FROM manifest_load_detail d
+  LEFT JOIN paquetes p ON p.package_id = d.package_id
+  LEFT JOIN manifest m ON m.manifest_id = COALESCE(d.manifest_id, p.manifest_id)
+  WHERE d.load_id = ${sqlNumber(id)}
+  ORDER BY d.id ASC
 `
 
 module.exports = {

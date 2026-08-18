@@ -67,6 +67,19 @@ function resolveTariff(matchedByCode, xmlTasa) {
   }
 }
 
+function processedDescription(fraction, resolvedTariff) {
+  const xmlRateDescription = xmlRateErrorDescription(fraction, resolvedTariff)
+  if (xmlRateDescription) {
+    return xmlRateDescription
+  }
+
+  if (fraction.analisis_riesgo === 'Rojo') {
+    return 'SAT modificó el valor declarado. Se aplicó el monto del XML.'
+  }
+
+  return null
+}
+
 function xmlRateErrorDescription(fraction, resolvedTariff) {
   if (resolvedTariff.missingTariff) {
     return missingTariffDetail(fraction)
@@ -137,6 +150,15 @@ function packageMaster(pkg) {
 
 function packagePoliza(pkg) {
   return pkg && pkg.poliza ? String(pkg.poliza).trim() : ''
+}
+
+function uniqueAffectedValues(items, key) {
+  return [...new Set(
+    items
+      .filter(item => isUpdatableResult(item.result) || item.result === RESULT.UPDATED)
+      .map(item => item[key])
+      .filter(value => value != null && value !== '')
+  )].join(', ')
 }
 
 async function matchDeclaration(connection, parsed) {
@@ -225,6 +247,8 @@ async function matchDeclaration(connection, parsed) {
         package_id: pkg.package_id,
         tariff_id: tariffId,
         dai: null,
+        manifest_id: pkg.manifest_id,
+        manifest_description: pkg.manifest_description,
         previous_costo_producto: pkg.costo_producto,
         previous_tariff_code: pkg.tariff_code,
         previous_tasa: pkg.tasa,
@@ -240,6 +264,8 @@ async function matchDeclaration(connection, parsed) {
         package_id: pkg.package_id,
         tariff_id: tariffId,
         dai: null,
+        manifest_id: pkg.manifest_id,
+        manifest_description: pkg.manifest_description,
         previous_costo_producto: pkg.costo_producto,
         previous_tariff_code: pkg.tariff_code,
         previous_tasa: pkg.tasa,
@@ -255,6 +281,8 @@ async function matchDeclaration(connection, parsed) {
         package_id: pkg.package_id,
         tariff_id: tariffId,
         dai: null,
+        manifest_id: pkg.manifest_id,
+        manifest_description: pkg.manifest_description,
         previous_costo_producto: pkg.costo_producto,
         previous_tariff_code: pkg.tariff_code,
         previous_tasa: pkg.tasa,
@@ -272,6 +300,8 @@ async function matchDeclaration(connection, parsed) {
         package_id: pkg.package_id,
         tariff_id: tariffId,
         dai: null,
+        manifest_id: pkg.manifest_id,
+        manifest_description: pkg.manifest_description,
         previous_costo_producto: pkg.costo_producto,
         previous_tariff_code: pkg.tariff_code,
         previous_tasa: pkg.tasa,
@@ -287,6 +317,8 @@ async function matchDeclaration(connection, parsed) {
         package_id: pkg.package_id,
         tariff_id: tariffId,
         dai: null,
+        manifest_id: pkg.manifest_id,
+        manifest_description: pkg.manifest_description,
         previous_costo_producto: pkg.costo_producto,
         previous_tariff_code: pkg.tariff_code,
         previous_tasa: pkg.tasa,
@@ -304,10 +336,11 @@ async function matchDeclaration(connection, parsed) {
       ...fraction,
       ...charges,
       result: useXmlRate ? RESULT.XML_RATE : RESULT.FOUND,
-      error_description: xmlRateErrorDescription(fraction, resolvedTariff),
+      error_description: processedDescription(fraction, resolvedTariff),
       package_id: pkg.package_id,
       tariff_id: tariffId,
       manifest_id: pkg.manifest_id,
+      manifest_description: pkg.manifest_description,
       previous_costo_producto: pkg.costo_producto,
       previous_tariff_code: pkg.tariff_code,
       previous_tasa: pkg.tasa,
@@ -321,6 +354,13 @@ async function matchDeclaration(connection, parsed) {
     declaration_number: parsed.declaration_number,
     master: parsed.master,
     declaration_date: parsed.declaration_date,
+    tipo_de_cambio: parsed.tipo_de_cambio,
+    sub_total: parsed.sub_total,
+    monto_iva: parsed.monto_iva,
+    monto_total: parsed.monto_total,
+    resultado_analisis_riesgo: parsed.resultado_analisis_riesgo,
+    manifest_id: uniqueAffectedValues(items, 'manifest_id'),
+    manifest_description: uniqueAffectedValues(items, 'manifest_description'),
     xml_count: parsed.fractions.length,
     already_processed: previousLoads.length > 0,
     previous_load_id: previousLoads.length > 0 ? previousLoads[0].id : null,

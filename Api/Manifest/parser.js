@@ -35,6 +35,19 @@ function parseNumber(value) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function parseRiskResult(value) {
+  const text = String(value || '').trim().toLowerCase()
+  if (text === 'rojo') {
+    return 'Rojo'
+  }
+
+  if (text === 'verde') {
+    return 'Verde'
+  }
+
+  return null
+}
+
 function parseTariffRate(value) {
   const parsed = parseNumber(value)
   if (parsed == null || parsed < 0) {
@@ -100,12 +113,13 @@ function parseXmlString(xml) {
   })
 }
 
-function mapFraction(fraccion, index) {
+function mapFraction(fraccion, index, headerRisk) {
   const merchandise = parseMerchandiseDescription(getText(fraccion.descripcionMercancias))
   const costoProducto = parseNumber(getText(fraccion.valorEnQuetzales))
   const tasa = parseTariffRate(getText(fraccion.tasaArancelaria))
   const tariffCodeXml = getText(fraccion.incisoArancelario)
   const daiXml = parseNumber(getText(fraccion.impuestoGuia))
+  const fractionRisk = parseRiskResult(getText(fraccion.resultadoAnalisisRiesgo))
   const missingFields = []
 
   if (!merchandise || !merchandise.guia) {
@@ -133,6 +147,7 @@ function mapFraction(fraccion, index) {
     tasa,
     costo_producto: costoProducto,
     dai_xml: daiXml,
+    analisis_riesgo: fractionRisk || headerRisk,
     invalid: missingFields.length > 0,
     invalid_message: missingFields.length > 0 ? `Datos invalidos: ${missingFields.join(', ')}` : null,
   }
@@ -152,6 +167,7 @@ async function parseDeclarationXml(xml) {
 
   const noDeclaracion = getText(declarationNode.noDeclaracion)
   const guiaEmbarque = getText(declarationNode.guiaEmbarque)
+  const headerRisk = parseRiskResult(getText(declarationNode.resultadoAnalisisRiesgo))
   const fractions = Array.isArray(declarationNode.fraccion)
     ? declarationNode.fraccion
     : declarationNode.fraccion
@@ -175,7 +191,12 @@ async function parseDeclarationXml(xml) {
     declaration_number_raw: noDeclaracion,
     master: guiaEmbarque,
     declaration_date: getText(declarationNode.fechaDeclaracion),
-    fractions: fractions.map(mapFraction),
+    tipo_de_cambio: parseNumber(getText(declarationNode.tipoDeCambio)),
+    sub_total: parseNumber(getText(declarationNode.subTotal)),
+    monto_iva: parseNumber(getText(declarationNode.montoIVA)),
+    monto_total: parseNumber(getText(declarationNode.montoTotal)),
+    resultado_analisis_riesgo: headerRisk,
+    fractions: fractions.map((fraccion, index) => mapFraction(fraccion, index, headerRisk)),
   }
 }
 
