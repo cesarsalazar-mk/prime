@@ -21,6 +21,27 @@ function nowGuatemala() {
   return moment().tz('America/Guatemala').format('YYYY-MM-DD HH:mm:ss')
 }
 
+function parsePagination(query) {
+  const parsedPage = Number(query && query.page)
+  const parsedLimit = Number(query && query.limit)
+  const page = Number.isFinite(parsedPage) && parsedPage > 0 ? Math.floor(parsedPage) : 1
+  const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(100, Math.floor(parsedLimit)) : 25
+
+  return {
+    page,
+    limit,
+    offset: (page - 1) * limit,
+  }
+}
+
+function paginationTotal(rows) {
+  if (!rows || !rows[0] || rows[0].total == null) {
+    return 0
+  }
+
+  return Number(rows[0].total)
+}
+
 function getErrorMessage(error) {
   if (!error) {
     return 'Error desconocido'
@@ -210,12 +231,24 @@ module.exports.confirmManifestLoad = async event => {
   }
 }
 
-module.exports.listManifestLoads = async () => {
+module.exports.listManifestLoads = async event => {
   const connection = await mysql.createConnection(dbConfig)
 
   try {
-    const [loads] = await connection.execute(storage.listLoads())
-    return response(200, loads, connection)
+    const pagination = parsePagination(event && event.queryStringParameters)
+    const [loads] = await connection.execute(storage.listLoads(pagination.offset, pagination.limit))
+    const [countRows] = await connection.execute(storage.countLoads())
+
+    return response(
+      200,
+      {
+        items: loads,
+        total: paginationTotal(countRows),
+        page: pagination.page,
+        limit: pagination.limit,
+      },
+      connection
+    )
   } catch (error) {
     console.log('listManifestLoads error', error)
     return response(400, { error: getErrorMessage(error) }, connection)
@@ -231,18 +264,23 @@ module.exports.getManifestLoadDetail = async event => {
       throw new Error('id missing')
     }
 
+    const pagination = parsePagination(event && event.queryStringParameters)
     const [loads] = await connection.execute(storage.getLoadById(id))
     if (!loads.length) {
       throw new Error('Procesamiento no encontrado')
     }
 
-    const [details] = await connection.execute(storage.getLoadDetails(id))
+    const [details] = await connection.execute(storage.getLoadDetails(id, pagination.offset, pagination.limit))
+    const [countRows] = await connection.execute(storage.countLoadDetails(id))
 
     return response(
       200,
       {
         ...loads[0],
         details,
+        total: paginationTotal(countRows),
+        page: pagination.page,
+        limit: pagination.limit,
       },
       connection
     )

@@ -268,7 +268,7 @@ const affectedManifestIdsSubquery = alias => `
     )
 `
 
-const listLoads = () => `
+const listLoads = (offset, limit) => `
   SELECT
     id,
     declaration_number,
@@ -294,7 +294,12 @@ const listLoads = () => `
     create_at
   FROM manifest_load
   ORDER BY id DESC
-  LIMIT 200
+  LIMIT ${sqlNumber(offset)}, ${sqlNumber(limit)}
+`
+
+const countLoads = () => `
+  SELECT COUNT(*) AS total
+  FROM manifest_load
 `
 
 const getLoadById = id => `
@@ -325,7 +330,7 @@ const getLoadById = id => `
   WHERE id = ${sqlNumber(id)}
 `
 
-const getLoadDetails = id => `
+const getLoadDetails = (id, offset, limit) => `
   SELECT
     d.id,
     d.load_id,
@@ -353,6 +358,13 @@ const getLoadDetails = id => `
   LEFT JOIN manifest m ON m.manifest_id = COALESCE(d.manifest_id, p.manifest_id)
   WHERE d.load_id = ${sqlNumber(id)}
   ORDER BY d.id ASC
+  LIMIT ${sqlNumber(offset)}, ${sqlNumber(limit)}
+`
+
+const countLoadDetails = id => `
+  SELECT COUNT(*) AS total
+  FROM manifest_load_detail
+  WHERE load_id = ${sqlNumber(id)}
 `
 
 module.exports = {
@@ -370,6 +382,8 @@ module.exports = {
   manifestsBulkUpdate,
   getSMSData,
   listLoads,
+  countLoads,
   getLoadById,
   getLoadDetails,
+  countLoadDetails,
 }
