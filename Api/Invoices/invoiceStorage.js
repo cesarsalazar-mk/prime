@@ -231,7 +231,7 @@ const get = (params) => {
 
 const getDetail = (id) => {
   const query = `SELECT D.id, client_id, nit, D.address, created_at, created_by, num_serie_sat, num_authorization_sat, num_control, total, sub_total, total_cta, observations,
-                transaction_number, delivery_date_sat, certification_date_date, annulation_date, reason, annul_by,
+                transaction_number, delivery_date_sat, certification_date_date, annulation_date, reason, annul_by, D.discount, D.seguro,
                 ds.name as status, dt.description,s.description
                 FROM documents D
                 INNER JOIN document_status ds on D.status = ds.id

@@ -1,5 +1,23 @@
 const accounting = require('accounting-js')
 
+const buildSeguroXmlLine = seguroAmount => {
+  const amount = Number(seguroAmount) || 0
+  if (amount <= 0) return ''
+
+  return `<stdTWS.stdTWSCIt.stdTWSDIt>
+                  <TrnLiNum>99</TrnLiNum>
+                  <TrnArtCod>E</TrnArtCod>
+                  <TrnArtNom>Seguro</TrnArtNom>
+                  <TrnCan>1</TrnCan>
+                  <TrnVUn>${accounting.toFixed(amount, 2)}</TrnVUn>
+                  <TrnUniMed>UNI</TrnUniMed>
+                  <TrnVDes>0.0</TrnVDes>
+                  <TrnArtBienSer>S</TrnArtBienSer>
+                  <TrnArtImpAdiCod>0</TrnArtImpAdiCod>
+                  <TrnArtImpAdiUniGrav>0</TrnArtImpAdiUniGrav>
+                 </stdTWS.stdTWSCIt.stdTWSDIt>`
+}
+
 const buildXML = (data, moment) => {
   //build XML Header
   //build XML Header
@@ -32,6 +50,7 @@ const buildXML = (data, moment) => {
     }
     _xml_detail = _xml_detail + str
   })
+  _xml_detail = _xml_detail + buildSeguroXmlLine(data.seguro)
   _xml_detail = `<stdTWSD>${_xml_detail}</stdTWSD>
                  <stdTWSCA1>
                     <stdTWS.stdTWSCA1.stdTWSCA1It>
@@ -93,6 +112,7 @@ const buildXMLAllInclude = (data, moment) => {
       _xml_detail = _xml_detail + str
     }
   })
+  _xml_detail = _xml_detail + buildSeguroXmlLine(data.seguro)
   _xml_detail = `<stdTWSD>${_xml_detail}</stdTWSD>
                  <stdTWSCA1>
                     <stdTWS.stdTWSCA1.stdTWSCA1It>
@@ -201,7 +221,7 @@ const buildDevInvoicePdf = (data, sat) => {
   content += pdfLine(`Subtotal: Q ${money(data.sub_total)}`)
   content += pdfLine(`Descuento: Q ${money(discount)}`)
   content += pdfLine(`Seguro: Q ${money(seguro)}`)
-  content += pdfLine(`Total: Q ${money(total - discount)}`)
+  content += pdfLine(`Total: Q ${money(total - discount + seguro)}`)
   content += 'ET\n'
 
   const stream = Buffer.from(content, 'latin1')
