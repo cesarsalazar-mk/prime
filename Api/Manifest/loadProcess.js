@@ -32,7 +32,7 @@ function xmlPercent(tasa) {
 
 function missingTariffDetail(fraction) {
   const percent = xmlPercent(fraction.tasa)
-  return `El inciso arancelario ${fraction.tariff_code_xml} no existe en tariffs. Se procesó con la tasa del XML (${percent}%). No se asignó tariff_code.`
+  return `El inciso arancelario ${fraction.tariff_code_xml} no existe en la base de datos. Se procesó con la tasa del XML (${percent}%). No se asignó codigo de arancel.`
 }
 
 function resolveTariff(matchedByCode, xmlTasa) {
@@ -95,10 +95,10 @@ function xmlRateErrorDescription(fraction, resolvedTariff) {
 function xmlRateDetail(fraction, tariffCount, rateMatchCount) {
   const percent = xmlPercent(fraction.tasa)
   if (rateMatchCount === 0) {
-    return `El inciso arancelario ${fraction.tariff_code_xml} coincide con ${tariffCount} filas en tariffs y ninguna tiene tasa ${percent}%. Se procesó con la tasa del XML (${percent}%). No se asignó tariff_code porque la partida no es única.`
+    return `El inciso arancelario ${fraction.tariff_code_xml} coincide con ${tariffCount} filas en la base de datos y ninguna tiene tasa ${percent}%. Se procesó con la tasa del XML (${percent}%). No se asignó codigo de arancel porque la partida no es única.`
   }
 
-  return `El inciso arancelario ${fraction.tariff_code_xml} y la tasa ${percent}% coinciden con ${rateMatchCount} filas en tariffs. Se procesó con la tasa del XML (${percent}%). No se asignó tariff_code porque la partida no es única.`
+  return `El inciso arancelario ${fraction.tariff_code_xml} y la tasa ${percent}% coinciden con ${rateMatchCount} filas en la base de datos. Se procesó con la tasa del XML (${percent}%). No se asignó codigo de arancel porque la partida no es única.`
 }
 
 function groupBy(items, key) {
@@ -153,12 +153,14 @@ function packagePoliza(pkg) {
 }
 
 function uniqueAffectedValues(items, key) {
-  return [...new Set(
-    items
-      .filter(item => isUpdatableResult(item.result) || item.result === RESULT.UPDATED)
-      .map(item => item[key])
-      .filter(value => value != null && value !== '')
-  )].join(', ')
+  return [
+    ...new Set(
+      items
+        .filter(item => isUpdatableResult(item.result) || item.result === RESULT.UPDATED)
+        .map(item => item[key])
+        .filter(value => value != null && value !== '')
+    ),
+  ].join(', ')
 }
 
 async function matchDeclaration(connection, parsed) {
@@ -220,7 +222,7 @@ async function matchDeclaration(connection, parsed) {
       return {
         ...fraction,
         result: RESULT.NOT_FOUND,
-        error_description: `La guia ${fraction.guia} no existe`,
+        error_description: `La guia ${fraction.guia} no fue encontrada en la base de datos`,
         package_id: null,
         tariff_id: tariffId,
         dai: null,
