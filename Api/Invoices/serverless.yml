@@ -5,7 +5,7 @@ plugins:
 
 provider:
   name: aws
-  runtime: nodejs12.x
+  runtime: nodejs20.x
   stage: ${opt:stage, 'pn'}
   region: us-east-1
   environment:
@@ -266,6 +266,50 @@ functions:
       - http:
           path: stores
           method: get
+          cors:
+            origin: '*'
+            allowCredentials: true
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+          authorizer:
+            arn: ${file(../../commons/credentials.json):${self:provider.stage}.pool_arn}
+    layers:
+      - arn:${file(../../commons/credentials.json):${self:provider.stage}.layer}
+
+  getSeguroFee:
+    handler: handler.getSeguroFee
+    timeout: 30
+    events:
+      - http:
+          path: settings/seguro-fee
+          method: get
+          cors:
+            origin: '*'
+            allowCredentials: true
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+          authorizer:
+            arn: ${file(../../commons/credentials.json):${self:provider.stage}.pool_arn}
+    layers:
+      - arn:${file(../../commons/credentials.json):${self:provider.stage}.layer}
+
+  updateSeguroFee:
+    handler: handler.updateSeguroFee
+    timeout: 30
+    events:
+      - http:
+          path: settings/seguro-fee
+          method: put
           cors:
             origin: '*'
             allowCredentials: true

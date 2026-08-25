@@ -4,7 +4,7 @@ const moment = require('moment-timezone')
 const isOffline = process.env['IS_OFFLINE']
 const { dbConfig } = require(`${isOffline ? '../..' : '.'}/commons/dbConfig`)
 const { response, wakeUpLambda } = require(`${isOffline ? '../..' : '.'}/commons/utils`)
-const { buildXML, generateCorrelative, buildXMLAllInclude } = require('./functions')
+const { buildXML, generateCorrelative, buildXMLAllInclude, buildDevInvoicePdf } = require('./functions')
 const xml2js = require('xml2js')
 const SOAP = require('soap')
 const AWS = require('aws-sdk')
@@ -51,12 +51,44 @@ module.exports.create = async (event, context) => {
     }
     const log = await connection.execute(storage.saveToLog(invoiceData, date, create.insertId))
     if (!log[0].insertId) throw Error('Error creating log')
-    console.log('making request')
-    const xml_response = await storage.makeRequestSoap(SOAP, process.env['URL_DEV_FACT'], invoiceData)
-    console.log('finishing request')
-    const json = await storage.parseToJson(xml_response.Respuesta, xml2js, date)
 
-    if (json.Errores) throw Error(JSON.stringify(json.Errores.Error))
+    const bypassEcofactura = process.env.STAGE === 'dev' || Boolean(isOffline)
+    let serializerResponse
+
+    if (bypassEcofactura) {
+      console.log('DEV: skipping Ecofactura SAT request')
+      const issuedAt = moment().tz('America/Guatemala').format('YYYY-MM-DD HH:mm:ss')
+      serializerResponse = {
+        create_at: issuedAt,
+        certification_date: issuedAt,
+        autorization_number: `DEV-${create.insertId}`,
+        sat_number: `DEV-${correlative || create.insertId}`,
+        error: null,
+        pdf: buildDevInvoicePdf(data, {
+          create_at: issuedAt,
+          autorization_number: `DEV-${create.insertId}`,
+          sat_number: `DEV-${correlative || create.insertId}`,
+        }),
+        xml: 'DEV_BYPASS',
+      }
+    } else {
+      console.log('making request')
+      const xml_response = await storage.makeRequestSoap(SOAP, process.env['URL_DEV_FACT'], invoiceData)
+      console.log('finishing request')
+      const json = await storage.parseToJson(xml_response.Respuesta, xml2js, date)
+
+      if (json.Errores) throw Error(JSON.stringify(json.Errores.Error))
+
+      serializerResponse = {
+        create_at: json.DTE ? json.DTE.FechaEmision[0] : null,
+        certification_date: json.DTE.FechaCertificacion ? json.DTE.FechaCertificacion[0] : null,
+        autorization_number: json.DTE.NumeroAutorizacion ? json.DTE.NumeroAutorizacion[0] : null,
+        sat_number: json.DTE.Numero ? json.DTE.Numero[0] : null,
+        error: json.DTE.Error ? json.DTE.Error[0] : null,
+        pdf: json.DTE.Pdf[0],
+        xml: json.DTE.Xml[0],
+      }
+    }
 
     const date_download = moment().tz('America/Guatemala').format('YYYY-MM-DD')
     //create detail
@@ -70,16 +102,6 @@ module.exports.create = async (event, context) => {
           return detail
         })
       )
-    }
-
-    let serializerResponse = {
-      create_at: json.DTE ? json.DTE.FechaEmision[0] : null,
-      certification_date: json.DTE.FechaCertificacion ? json.DTE.FechaCertificacion[0] : null,
-      autorization_number: json.DTE.NumeroAutorizacion ? json.DTE.NumeroAutorizacion[0] : null,
-      sat_number: json.DTE.Numero ? json.DTE.Numero[0] : null,
-      error: json.DTE.Error ? json.DTE.Error[0] : null,
-      pdf: json.DTE.Pdf[0],
-      xml: json.DTE.Xml[0],
     }
     //console.log(serializerResponse, 'serializerResponse')
 
@@ -121,14 +143,14 @@ module.exports.documents = async event => {
     }
 
     const [documents] = await connection.execute(storage.get(params))
-    
+
     //get packages descriptions
-    let packagesList = documents.map(element => element.observations.replace('Guias # ','').replace(/\s/g, '').slice(0, -1).split(','))
+    let packagesList = documents.map(element => element.observations.replace('Guias # ', '').replace(/\s/g, '').slice(0, -1).split(','))
     let packagesIds = [...new Set([].concat.apply([], packagesList))]
     let packagesIdsString = packagesIds.map(element => `'${element}'`)
     const [packagesDescriptions] = await connection.execute(storage.getPackagesDescription(packagesIdsString))
-    
-    documents.forEach(element=>{      
+
+    documents.forEach(element => {
       element.descripcionPaquetes = packagesDescriptions.filter(el => element.observations.includes(el.guia))
     })
 
@@ -246,8 +268,8 @@ module.exports.annulSNS = async event => {
       ? JSON.parse(event.body)
       : event.body
     : event.Records
-    ? JSON.parse(event.Records[0].Sns.Message)
-    : null
+      ? JSON.parse(event.Records[0].Sns.Message)
+      : null
   console.log(body)
   try {
     const date = moment().tz('America/Guatemala').format('YYYY-MM-DD hh:mm:ss')
@@ -275,39 +297,37 @@ module.exports.annulSNS = async event => {
 
     //validate if exists an error
     const validateResponse = serializerResponse.hasOwnProperty('error')
-    
-    if(!!validateResponse && serializerResponse.error != null){      
-      
-      console.log("ERROR >>> ",serializerResponse)
-      
+
+    if (!!validateResponse && serializerResponse.error != null) {
+      console.log('ERROR >>> ', serializerResponse)
+
       let alreadyAnnul = serializerResponse.error['_']
 
-      if(alreadyAnnul == "EL DOCUMENTO YA ESTA ANULÁDO"){        
+      if (alreadyAnnul == 'EL DOCUMENTO YA ESTA ANULÁDO') {
         await connection.execute(storage.updatedToLog(serializerResponse, date, body.id))
         await connection.execute(storage.revertPackage(body.id))
         await connection.execute(storage.revertConciliation(body.id, date))
-        console.log("EL DOCUMENTO YA ESTA ANULÁDO")
+        console.log('EL DOCUMENTO YA ESTA ANULÁDO')
         return response(400, { message: 'EL DOCUMENTO YA ESTA ANULÁDO' }, connection)
-      } 
+      }
 
-      throw new Error(`Error on invoice validate`)      
+      throw new Error(`Error on invoice validate`)
     }
 
     //update packages info
     await connection.execute(storage.updatedToLog(serializerResponse, date, body.id))
     await connection.execute(storage.revertPackage(body.id))
     await connection.execute(storage.revertConciliation(body.id, date))
-    
+
     console.log('** all updated **')
     delete serializerResponse.pdf
-    delete serializerResponse.xml    
+    delete serializerResponse.xml
     console.log('finished', serializerResponse)
-    
-    return response(200, serializerResponse, connection)
 
+    return response(200, serializerResponse, connection)
   } catch (e) {
     const connection = await mysql.createConnection(dbConfig)
-    await connection.execute(storage.invoiceAnnul('', '', body.id, 5))    
+    await connection.execute(storage.invoiceAnnul('', '', body.id, 5))
     console.log(e, 'annulSNS-ERROR')
     return response(400, { message: 'Error' }, connection)
   }
@@ -388,5 +408,56 @@ module.exports.reconciliation = async event => {
   } catch (e) {
     console.log(e)
     return response(400, e.message, null)
+  }
+}
+ 
+
+module.exports.getSeguroFee = async () => {
+  const connection = await mysql.createConnection(dbConfig)
+  try {
+    const [rows] = await connection.execute(storage.getSeguroFee())
+    const amountRow = rows.find(r => r.setting_key === 'seguro_fee')
+    const enabledRow = rows.find(r => r.setting_key === 'seguro_fee_enabled')
+
+    return response(
+      200,
+      {
+        seguroFeeAmount: amountRow ? parseFloat(amountRow.setting_value) : 0,
+        seguroFeeEnabled: enabledRow ? enabledRow.setting_value === '1' : false,
+        updated_at: amountRow ? amountRow.updated_at : null,
+        updated_by: amountRow ? amountRow.updated_by : null,
+      },
+      connection
+    )
+  } catch (e) {
+    console.log(e)
+    return response(400, e.message, connection)
+  }
+}
+
+module.exports.updateSeguroFee = async event => {
+  const connection = await mysql.createConnection(dbConfig)
+  try {
+    const data = JSON.parse(event.body)
+    const seguroFeeAmount = data.seguroFeeAmount != null ? data.seguroFeeAmount : data.seguroFeePercent
+    const seguroFeeEnabled = !!data.seguroFeeEnabled
+
+    if (seguroFeeAmount === null || seguroFeeAmount === undefined || seguroFeeAmount === '') {
+      throw Error('seguroFeeAmount is required')
+    }
+
+    const fee = parseFloat(seguroFeeAmount)
+    if (isNaN(fee) || fee < 0 || fee > 100) {
+      throw Error('seguroFeeAmount must be a number between 0 and 100')
+    }
+
+    const date = moment().tz('America/Guatemala').format('YYYY-MM-DD HH:mm:ss')
+    await connection.execute(storage.upsertSeguroFee(fee, date, data.updated_by))
+    await connection.execute(storage.upsertSeguroFeeEnabled(seguroFeeEnabled, date, data.updated_by))
+
+    return response(200, { seguroFeeAmount: fee, seguroFeeEnabled }, connection)
+  } catch (e) {
+    console.log(e)
+    return response(400, e.message, connection)
   }
 }

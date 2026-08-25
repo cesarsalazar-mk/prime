@@ -45,8 +45,10 @@ const create = (data,date,correlative) => {
   if(data.document_type !== 'TARIFA_INDIVIDUAL')
     amount = calculateToTal(data.items)
   
+  const seguro = data.seguro != null && data.seguro !== '' ? Number(data.seguro) : 0
+
   const query = `INSERT INTO documents (client_id, nit, address, type_doc, num_control,
-                  total, sub_total, total_cta, observations,status,created_at,created_by, payment_id, store_id,discount)
+                  total, sub_total, total_cta, observations,status,created_at,created_by, payment_id, store_id,discount,seguro)
                   VALUES ('${data.client_id}',
                   '${data.nit}',
                   '${data.address}',
@@ -60,7 +62,7 @@ const create = (data,date,correlative) => {
                   '${date}',
                   '${data.created_by}',
                   ${data.payment_type},
-                  ${data.store_id},${data.discount}) `
+                  ${data.store_id},${data.discount},${isNaN(seguro) ? 0 : seguro}) `
   
   return query
 }
@@ -229,7 +231,7 @@ const get = (params) => {
 
 const getDetail = (id) => {
   const query = `SELECT D.id, client_id, nit, D.address, created_at, created_by, num_serie_sat, num_authorization_sat, num_control, total, sub_total, total_cta, observations,
-                transaction_number, delivery_date_sat, certification_date_date, annulation_date, reason, annul_by,
+                transaction_number, delivery_date_sat, certification_date_date, annulation_date, reason, annul_by, D.discount, D.seguro,
                 ds.name as status, dt.description,s.description
                 FROM documents D
                 INNER JOIN document_status ds on D.status = ds.id
@@ -393,6 +395,36 @@ const getPackagesDescription = (items) => {
   return query
 }
 
+const SEGURO_FEE_KEY = 'seguro_fee'
+const SEGURO_FEE_ENABLED_KEY = 'seguro_fee_enabled'
+
+const getSeguroFee = () => {
+  const query = `SELECT setting_key, setting_value, updated_at, updated_by
+                 FROM settings
+                 WHERE setting_key IN ('${SEGURO_FEE_KEY}', '${SEGURO_FEE_ENABLED_KEY}')`
+  return query
+}
+
+const upsertSeguroFee = (value, date, updatedBy) => {
+  const query = `INSERT INTO settings (setting_key, setting_value, updated_at, updated_by)
+                 VALUES ('${SEGURO_FEE_KEY}', '${value}', '${date}', '${updatedBy || ''}')
+                 ON DUPLICATE KEY UPDATE
+                   setting_value = '${value}',
+                   updated_at = '${date}',
+                   updated_by = '${updatedBy || ''}'`
+  return query
+}
+
+const upsertSeguroFeeEnabled = (enabled, date, updatedBy) => {
+  const query = `INSERT INTO settings (setting_key, setting_value, updated_at, updated_by)
+                 VALUES ('${SEGURO_FEE_ENABLED_KEY}', '${enabled ? '1' : '0'}', '${date}', '${updatedBy || ''}')
+                 ON DUPLICATE KEY UPDATE
+                   setting_value = '${enabled ? '1' : '0'}',
+                   updated_at = '${date}',
+                   updated_by = '${updatedBy || ''}'`
+  return query
+}
+
 module.exports = {
   post: create,
   isEmpty,
@@ -420,5 +452,8 @@ module.exports = {
   revertPackage,
   revertConciliation,
   stores,
-  getPackagesDescription
+  getPackagesDescription,
+  getSeguroFee,
+  upsertSeguroFee,
+  upsertSeguroFeeEnabled,
 }
