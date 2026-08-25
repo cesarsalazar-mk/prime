@@ -125,10 +125,11 @@ module.exports.exportManifest = async event => {
     let file
 
     const poundToKgFactor = 0.453592
+    const hasVoucherDocument = value => value != null && String(value).trim() !== ''
     const manifestData =
       result && result[0]
-        ? result.map(row =>
-            Object.keys(row).reduce((r, k) => {
+        ? result.map(row => {
+            const mapped = Object.keys(row).reduce((r, k) => {
               if (k === 'weight') {
                 return {
                   ...r,
@@ -140,7 +141,12 @@ module.exports.exportManifest = async event => {
 
               return { ...r, [k]: row[k] }
             }, {})
-          )
+
+            mapped.facturaRecibo =
+              hasVoucherDocument(row.voucher_bill) || hasVoucherDocument(row.voucher_payment) ? 'Si' : 'No'
+
+            return mapped
+          })
         : []
 
     console.log('manifestData ', manifestData)
@@ -160,6 +166,7 @@ module.exports.exportManifest = async event => {
         width: 16.17,
         numFmt: '"$"#,##0.00',
       },
+      { name: 'Factura/Recibo', column: 'facturaRecibo', width: 16 },
     ]
 
     if (params.includeTariff) {
