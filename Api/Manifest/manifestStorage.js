@@ -19,10 +19,8 @@ const readManifest = params => {
       SUM(
         CASE
           WHEN p.package_id IS NOT NULL
-            AND (
-              (p.voucher_bill IS NOT NULL AND TRIM(p.voucher_bill) <> '')
-              OR (p.voucher_payment IS NOT NULL AND TRIM(p.voucher_payment) <> '')
-            )
+            AND p.voucher_bill IS NOT NULL
+            AND TRIM(p.voucher_bill) <> ''
           THEN 1 ELSE 0
         END
       ) AS packages_with_invoice,
@@ -30,10 +28,24 @@ const readManifest = params => {
         CASE
           WHEN p.package_id IS NOT NULL
             AND (p.voucher_bill IS NULL OR TRIM(p.voucher_bill) = '')
+          THEN 1 ELSE 0
+        END
+      ) AS packages_without_invoice,
+      SUM(
+        CASE
+          WHEN p.package_id IS NOT NULL
+            AND p.voucher_payment IS NOT NULL
+            AND TRIM(p.voucher_payment) <> ''
+          THEN 1 ELSE 0
+        END
+      ) AS packages_with_receipt,
+      SUM(
+        CASE
+          WHEN p.package_id IS NOT NULL
             AND (p.voucher_payment IS NULL OR TRIM(p.voucher_payment) = '')
           THEN 1 ELSE 0
         END
-      ) AS packages_without_invoice
+      ) AS packages_without_receipt
     FROM manifest m
     LEFT JOIN paquetes p ON p.manifest_id = m.manifest_id
     WHERE ${statusWhereCondition} AND ${descriptionWhereCondition}

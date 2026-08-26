@@ -142,8 +142,8 @@ module.exports.exportManifest = async event => {
               return { ...r, [k]: row[k] }
             }, {})
 
-            mapped.facturaRecibo =
-              hasVoucherDocument(row.voucher_bill) || hasVoucherDocument(row.voucher_payment) ? 'Si' : 'No'
+            mapped.factura = hasVoucherDocument(row.voucher_bill) ? 'Si' : 'No'
+            mapped.recibo = hasVoucherDocument(row.voucher_payment) ? 'Si' : 'No'
 
             return mapped
           })
@@ -166,7 +166,8 @@ module.exports.exportManifest = async event => {
         width: 16.17,
         numFmt: '"$"#,##0.00',
       },
-      { name: 'Factura/Recibo', column: 'facturaRecibo', width: 16 },
+      { name: 'Factura', column: 'factura', width: 12 },
+      { name: 'Recibo', column: 'recibo', width: 12 },
     ]
 
     if (params.includeTariff) {
