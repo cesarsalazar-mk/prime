@@ -7,7 +7,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "deploy": "export AWS_PROFILE=traestodo && serverless deploy",
-    "sls-local": "nodemon --exec sls offline"
+    "sls-local": "nodemon --exec sls offline",
+    "resend-sms": "node scripts/resend-charge-sms.js"
   },
   "license": "ISC",
   "dependencies": {
