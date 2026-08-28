@@ -11,7 +11,41 @@ const readManifest = params => {
   const descriptionWhereCondition = params.description ? `m.description = '${params.description}'` : `1=1`
 
   return `
-    SELECT m.manifest_id, m.description, m.status, COUNT(p.package_id) AS packages_count
+    SELECT
+      m.manifest_id,
+      m.description,
+      m.status,
+      COUNT(p.package_id) AS packages_count,
+      SUM(
+        CASE
+          WHEN p.package_id IS NOT NULL
+            AND p.voucher_bill IS NOT NULL
+            AND TRIM(p.voucher_bill) <> ''
+          THEN 1 ELSE 0
+        END
+      ) AS packages_with_invoice,
+      SUM(
+        CASE
+          WHEN p.package_id IS NOT NULL
+            AND (p.voucher_bill IS NULL OR TRIM(p.voucher_bill) = '')
+          THEN 1 ELSE 0
+        END
+      ) AS packages_without_invoice,
+      SUM(
+        CASE
+          WHEN p.package_id IS NOT NULL
+            AND p.voucher_payment IS NOT NULL
+            AND TRIM(p.voucher_payment) <> ''
+          THEN 1 ELSE 0
+        END
+      ) AS packages_with_receipt,
+      SUM(
+        CASE
+          WHEN p.package_id IS NOT NULL
+            AND (p.voucher_payment IS NULL OR TRIM(p.voucher_payment) = '')
+          THEN 1 ELSE 0
+        END
+      ) AS packages_without_receipt
     FROM manifest m
     LEFT JOIN paquetes p ON p.manifest_id = m.manifest_id
     WHERE ${statusWhereCondition} AND ${descriptionWhereCondition}
