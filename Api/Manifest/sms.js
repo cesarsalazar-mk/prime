@@ -8,15 +8,12 @@ async function sendSMSviaSNS(params) {
     profile: params.profile,
     data: params.data,
   }
-  console.log('--------------------------------')
-  console.log('SENDING SMS', payload)
-  console.log('--------------------------------')
-  // await sns
-  //   .publish({
-  //     Message: JSON.stringify(payload),
-  //     TopicArn: `arn:aws:sns:us-east-1:${process.env['ACCOUNT_ID']}:sms-${process.env['STAGE']}-tigo`,
-  //   })
-  //   .promise()
+  await sns
+    .publish({
+      Message: JSON.stringify(payload),
+      TopicArn: `arn:aws:sns:us-east-1:${process.env['ACCOUNT_ID']}:sms-${process.env['STAGE']}-tigo`,
+    })
+    .promise()
 }
 
 function getSendSMSviaSNSParams(data) {
