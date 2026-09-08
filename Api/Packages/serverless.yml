@@ -454,3 +454,47 @@ functions:
             arn: ${file(../../commons/credentials.json):${self:provider.stage}.pool_arn}
     layers:
       - arn:${file(../../commons/credentials.json):${self:provider.stage}.layer}
+
+  getPackageForLabels:
+    handler: handler.readPackageForLabels
+    timeout: 30
+    events:
+      - http:
+          path: packages/labels/{guia}
+          method: get
+          cors:
+            origin: '*'
+            allowCredentials: true
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+          authorizer:
+            arn: ${file(../../commons/credentials.json):${self:provider.stage}.pool_arn}
+    layers:
+      - arn:${file(../../commons/credentials.json):${self:provider.stage}.layer}
+
+  packagePiecesUpdate:
+    handler: handler.updatePieces
+    timeout: 30
+    events:
+      - http:
+          path: packages/{package_id}/pieces
+          method: put
+          cors:
+            origin: '*'
+            allowCredentials: true
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+          authorizer:
+            arn: ${file(../../commons/credentials.json):${self:provider.stage}.pool_arn}
+    layers:
+      - arn:${file(../../commons/credentials.json):${self:provider.stage}.layer}
