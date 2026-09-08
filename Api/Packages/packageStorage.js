@@ -355,6 +355,12 @@ const downloadSimple = (date, package_id) => {
   return query
 }
 
+const updateToRetenido = package_id => {
+  return `UPDATE paquetes SET status = 'Retenido'
+          WHERE package_id = ${parseInt(package_id, 10)}
+          AND status = 'En Warehouse'`
+}
+
 const checkGuide = data => {
   const query = `SELECT * FROM guides WHERE master = '${data.master}' AND poliza = '${data.poliza}'`
   return query
@@ -491,6 +497,7 @@ module.exports = {
   transfer,
   logPackage,
   downloadSimple,
+  updateToRetenido,
   checkGuide,
   closeGuide,
   postGuide,
