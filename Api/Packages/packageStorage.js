@@ -481,6 +481,41 @@ const readGuideByMaster = master => `
 
 const findMaxPaqueteById = () => 'SELECT IFNULL(MAX(CONVERT(guia, SIGNED INTEGER)), 0) AS id FROM paquetes'
 
+const getByGuiaForLabels = guia => {
+  const safeGuia = String(guia || '').replace(/'/g, "''")
+
+  return `
+    SELECT
+      p.package_id,
+      p.guia,
+      p.tracking,
+      p.status,
+      IF(IFNULL(p.pieces, 0) < 1, 1, p.pieces) AS pieces,
+      p.weight,
+      p.description,
+      p.measurements,
+      p.ing_date,
+      p.client_id,
+      COALESCE(u.name, c.contact_name, c.client_name, '') AS client_name,
+      IFNULL(s.name, '') AS provider_name,
+      IFNULL(d.name, 'GUATEMALA') AS destination_name
+    FROM paquetes p
+    LEFT JOIN clientes c ON c.client_id = p.client_id
+    LEFT JOIN usuarios u ON u.id = c.id_usuario
+    LEFT JOIN suppliers s ON s.id = p.supplier_id
+    LEFT JOIN destinations d ON d.id = p.destination_id
+    WHERE p.guia = '${safeGuia}'
+    LIMIT 1
+  `
+}
+
+const updatePieces = (package_id, pieces) => `
+  UPDATE paquetes
+  SET pieces = ${pieces}
+  WHERE package_id = ${package_id}
+    AND status = 'En Warehouse'
+`
+
 module.exports = {
   get: read,
   post: create,
@@ -517,5 +552,7 @@ module.exports = {
   readPackagesByTracking,
   findMaxPaqueteById,
   getUncompleteManifestsByHold,
-  createByClient
+  createByClient,
+  getByGuiaForLabels,
+  updatePieces,
 }

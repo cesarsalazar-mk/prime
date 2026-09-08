@@ -864,3 +864,65 @@ module.exports.readGuide = async event => {
     return response(400, e, connection)
   }
 }
+
+module.exports.readPackageForLabels = async event => {
+  const connection = await mysql.createConnection(dbConfig)
+  try {
+    const guia = event.pathParameters && event.pathParameters.guia
+
+    if (!guia) throw new Error('guia missing')
+
+    const [packages] = await connection.execute(storage.getByGuiaForLabels(guia))
+
+    if (!packages.length) {
+      return response(404, { error: 'No se encontro un paquete con esa guia' }, connection)
+    }
+
+    return response(200, packages[0], connection)
+  } catch (e) {
+    console.log(e, 'readPackageForLabels')
+    return response(400, { error: e.message || e }, connection)
+  }
+}
+
+module.exports.updatePieces = async event => {
+  const connection = await mysql.createConnection(dbConfig)
+  try {
+    const package_id = event.pathParameters && event.pathParameters.package_id ? JSON.parse(event.pathParameters.package_id) : undefined
+
+    if (package_id === undefined) throw new Error('package_id missing')
+
+    const data = getBody(event) || {}
+    const pieces = parseInt(data && data.pieces, 10)
+
+    if (!pieces || pieces < 1) throw new Error('pieces must be a positive number')
+
+    const [packages] = await connection.execute(storage.getByid(package_id))
+
+    if (!packages.length) throw new Error('Package not found')
+    if (packages[0].status !== 'En Warehouse') throw new Error('Only packages in En Warehouse can be split')
+
+    const [updateResult] = await connection.execute(storage.updatePieces(package_id, pieces))
+
+    if (!updateResult || updateResult.affectedRows === 0) {
+      throw new Error('Package pieces were not updated')
+    }
+
+    await createLogsviaSNS(
+      {
+        package_id,
+        pieces,
+        guia: data.guia,
+        userLog: data.userLog,
+      },
+      'package-update-pieces'
+    ).catch(logError => {
+      console.log(logError, 'updatePieces log')
+    })
+
+    return response(200, { package_id, pieces }, connection)
+  } catch (e) {
+    console.log(e, 'updatePieces')
+    return response(400, { error: e.message || e }, connection)
+  }
+}
