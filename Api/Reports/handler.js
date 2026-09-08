@@ -138,14 +138,16 @@ module.exports.warehouse = async event => {
       total = event.queryStringParameters.total
     }
 
+    const retenido = event.queryStringParameters && event.queryStringParameters.retenido
+
     const connection = await mysql.createConnection(dbConfig)
 
     if (total) {
-      const [totals] = await connection.execute(storage.packageInWarehouseTotal())
+      const [totals] = await connection.execute(retenido ? storage.packageRetenidoTotal() : storage.packageInWarehouseTotal())
       return response(200, totals, connection)
     }
 
-    const [totals] = await connection.execute(storage.packageInWarehouse())
+    const [totals] = await connection.execute(retenido ? storage.packageRetenido() : storage.packageInWarehouse())
 
     return response(200, totals, connection)
   } catch (e) {
