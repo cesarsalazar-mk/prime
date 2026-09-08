@@ -210,7 +210,22 @@ module.exports.update = async (event, context) => {
     const download =
       event.queryStringParameters && event.queryStringParameters.download ? JSON.parse(event.queryStringParameters.download) : undefined
 
+    const retenido =
+      event.queryStringParameters && event.queryStringParameters.retenido ? JSON.parse(event.queryStringParameters.retenido) : undefined
+
     if (package_id === undefined) throw 'pathParameters missing'
+
+    if (retenido) {
+      const [updateResult] = await connection.execute(storage.updateToRetenido(package_id))
+
+      if (!updateResult || updateResult.affectedRows === 0) {
+        throw new Error('El paquete no puede retenerse. Debe estar En Warehouse.')
+      }
+
+      await createLogsviaSNS({ package_id, status: 'Retenido' }, 'package-update')
+
+      return response(200, { package_id, status: 'Retenido' }, connection)
+    }
 
     let data = JSON.parse(event.body)
 
@@ -222,6 +237,7 @@ module.exports.update = async (event, context) => {
      * Recoger en Traestodo
      * Entregado
      * Entregado con saldo pendiente
+     * Retenido
      * */
     if (download) {
       const update = await connection.execute(storage.downloadSimple(date, package_id))
