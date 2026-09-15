@@ -130,13 +130,6 @@ module.exports.exportManifest = async event => {
       result && result[0]
         ? result.map(row => {
             const mapped = Object.keys(row).reduce((r, k) => {
-              if (k === 'status') {
-                return {
-                  ...r,
-                  [k]: row[k] === 'Retenido' ? 'Fuerza Tarea' : row[k],
-                }
-              }
-
               if (k === 'weight') {
                 return {
                   ...r,

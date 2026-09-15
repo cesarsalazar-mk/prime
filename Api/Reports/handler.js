@@ -8,19 +8,6 @@ let storage = require('./reportStorage')
 const AWS = require('aws-sdk')
 AWS.config.update({ region: 'us-east-1' })
 
-const mapPackageStatusLabel = rows => {
-  if (!Array.isArray(rows)) return rows
-
-  return rows.map(row => {
-    if (!row || row.status !== 'Retenido') return row
-
-    return {
-      ...row,
-      status: 'Fuerza Tarea',
-    }
-  })
-}
-
 module.exports.reports = async (event, context) => {
   try {
     let total = 0
@@ -47,7 +34,7 @@ module.exports.reports = async (event, context) => {
     }
 
     const [totals] = await connection.execute(storage.read(date, page))
-    return response(200, mapPackageStatusLabel(totals), connection)
+    return response(200, totals, connection)
   } catch (e) {
     console.log(e, 'catch')
     return response(400, e, null)
@@ -76,7 +63,7 @@ module.exports.entries = async event => {
     }
 
     const [totals] = await connection.execute(storage.entryPackageDetail(date, page))
-    return response(200, mapPackageStatusLabel(totals), connection)
+    return response(200, totals, connection)
   } catch (e) {
     console.log(e, 'catch')
     return response(400, e, null)
@@ -109,7 +96,7 @@ module.exports.entriesOnHold = async event => {
     }
 
     const [totals] = await connection.execute(storage.entryTicketPackageDetail(startDate,endDate, page))
-    return response(200, mapPackageStatusLabel(totals), connection)
+    return response(200, totals, connection)
   } catch (e) {
     console.log(e, 'catch')
     return response(400, e, null)
@@ -134,7 +121,7 @@ module.exports.route = async event => {
     }
 
     const [totals] = await connection.execute(storage.packagesOnRoute(date, page))
-    return response(200, mapPackageStatusLabel(totals), connection)
+    return response(200, totals, connection)
   } catch (e) {
     console.log(e, 'catch')
     return response(400, e, null)
@@ -162,7 +149,7 @@ module.exports.warehouse = async event => {
 
     const [totals] = await connection.execute(retenido ? storage.packageRetenido() : storage.packageInWarehouse())
 
-    return response(200, mapPackageStatusLabel(totals), connection)
+    return response(200, totals, connection)
   } catch (e) {
     console.log(e, 'catch')
     return response(400, e, null)
@@ -208,7 +195,7 @@ module.exports.byMaster = async event => {
     const connection = await mysql.createConnection(dbConfig)
     const [result] = await connection.execute(storage.reportByMaster(master, poliza))
     
-    return response(200, mapPackageStatusLabel(result), connection)
+    return response(200, result, connection)
   } catch (e) {
     return response(400, e.message, null)
   }
@@ -290,10 +277,9 @@ module.exports.byGuiaDetail = async event => {
     const connection = await mysql.createConnection(dbConfig)
     const [result] = await connection.execute(storage.getGuiaDetail(guia))
   
-    return response(200, mapPackageStatusLabel(result), connection)
+    return response(200, result, connection)
   
   }catch (e){
     return response(400, e.message, null)
   }
 }
-

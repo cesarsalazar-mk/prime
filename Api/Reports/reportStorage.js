@@ -110,7 +110,7 @@ const packageInWarehouse = () => {
                   where ent_date ='0000-00-00' 
                   AND A.status != 'Registrado'
                   AND A.status != 'En Warehouse'
-                  AND A.status != 'Retenido'
+                  AND A.status != 'Fuerza Tarea'
                   ORDER BY A.client_id DESC;`;
   return query;
 };
@@ -124,14 +124,14 @@ const packageInWarehouseTotal = () => {
                  where ent_date ='0000-00-00' 
                  AND A.status != 'Registrado' 
                  AND A.status != 'En Warehouse'
-                 AND A.status != 'Retenido'`
+                 AND A.status != 'Fuerza Tarea'`
   return query;
 };
 
 const packageRetenido = () => {
   const query = `select A.*, B.entrega from paquetes A
                   inner join clientes B on A.client_id = B.client_id
-                  where A.status = 'Retenido'
+                  where A.status = 'Fuerza Tarea'
                   ORDER BY A.client_id DESC;`;
   return query;
 };
@@ -139,7 +139,7 @@ const packageRetenido = () => {
 const packageRetenidoTotal = () => {
   const query = `SELECT count(package_id) as tota_paquetes, sum(weight) as total_libras, sum(total_a_pagar) as total_por_cobrar from paquetes A
                  inner join clientes B on A.client_id = B.client_id
-                 where A.status = 'Retenido'`
+                 where A.status = 'Fuerza Tarea'`
   return query;
 };
 

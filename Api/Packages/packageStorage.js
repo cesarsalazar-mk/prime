@@ -40,7 +40,7 @@ const read = (page, type, id) => {
   return query
 }
 
-const readPackagesByTracking = (tracking) => `
+const readPackagesByTracking = tracking => `
   SELECT
     p.guia,
     p.supplier_id,
@@ -117,12 +117,12 @@ const create = (data, newGuiaId) => {
   if (data.status) {
     status = data.status
   }
-  
+
   if (data.entrega === 'Entrega a Domicilio') {
     status = 'Listo para Entrega a Domicilio'
   }
 
-  if (data.status === 'Registrado'){
+  if (data.status === 'Registrado') {
     status = 'Registrado'
   }
 
@@ -154,7 +154,7 @@ const create = (data, newGuiaId) => {
   return query
 }
 
-const createByClient = (data) => {
+const createByClient = data => {
   const query = `INSERT INTO paquetes (tracking, client_id, weight, description, category_id, total_a_pagar, ing_date ,status,
                 entregado, cancelado, delivery, create_by, costo_producto, dai, cif, importe, master, poliza, tasa, total_iva,
                 voucher_bill,
@@ -186,7 +186,7 @@ const createDetail = (data, package_id, date, status) => {
   let updateStatus = 3
   if (status === 'Entregado' || status === 'Entregado') {
     updateStatus = 4
-  }else if (status === 'Registrado') {
+  } else if (status === 'Registrado') {
     updateStatus = 5
   }
 
@@ -244,12 +244,8 @@ const updateStatus = (data, package_id, date, status) => {
 }
 
 const updateVouchers = (data, package_id) => {
-  const voucherBill =
-    data.voucher_bill && data.voucher_bill.length > 5 ? `'${String(data.voucher_bill).replace(/'/g, "''")}'` : 'NULL'
-  const voucherPayment =
-    data.voucher_payment && data.voucher_payment.length > 5
-      ? `'${String(data.voucher_payment).replace(/'/g, "''")}'`
-      : 'NULL'
+  const voucherBill = data.voucher_bill && data.voucher_bill.length > 5 ? `'${String(data.voucher_bill).replace(/'/g, "''")}'` : 'NULL'
+  const voucherPayment = data.voucher_payment && data.voucher_payment.length > 5 ? `'${String(data.voucher_payment).replace(/'/g, "''")}'` : 'NULL'
   const tracking = String(data.tracking || '').replace(/'/g, "''")
   const guia = String(data.guia || '').replace(/'/g, "''")
 
@@ -298,8 +294,8 @@ const saveRemaining = (data, date) => {
   }
   const query = `INSERT INTO accounts_receivable (package_id, amount, charge, remaining, client_id, date)
                   VALUES (${data.package_id},${total},${data.anticipo ? parseInt(data.anticipo) : 0},${
-    data.pendiente ? parseInt(data.pendiente) : 0
-  },'${data.client_id}', '${date}')`
+                    data.pendiente ? parseInt(data.pendiente) : 0
+                  },'${data.client_id}', '${date}')`
 
   return query
 }
@@ -356,9 +352,9 @@ const downloadSimple = (date, package_id) => {
 }
 
 const updateToRetenido = package_id => {
-  return `UPDATE paquetes SET status = 'Retenido'
+  return `UPDATE paquetes SET status = 'Fuerza Tarea'
           WHERE package_id = ${parseInt(package_id, 10)}
-          AND status = 'En Warehouse'`
+          AND status NOT IN ('Entregado', 'Registrado')`
 }
 
 const checkGuide = data => {

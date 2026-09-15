@@ -219,12 +219,32 @@ module.exports.update = async (event, context) => {
       const [updateResult] = await connection.execute(storage.updateToRetenido(package_id))
 
       if (!updateResult || updateResult.affectedRows === 0) {
-        throw new Error('El paquete no puede retenerse. Debe estar En Warehouse.')
+        throw new Error('El paquete no puede marcarse como Fuerza Tarea. No debe estar Entregado ni Registrado.')
       }
 
-      await createLogsviaSNS({ package_id, status: 'Retenido' }, 'package-update')
+      await createLogsviaSNS({ package_id, status: 'Fuerza Tarea' }, 'package-update')
 
-      return response(200, { package_id, status: 'Retenido' }, connection)
+      try {
+        const [smsData] = await connection.execute(storage.getSMSData([package_id]))
+        console.log('SMS Fuerza Tarea data', smsData)
+
+        if (!smsData || !smsData[0]) {
+          console.log('SMS Fuerza Tarea skipped: no package/client data')
+        } else if (!smsData[0].phone) {
+          console.log('SMS Fuerza Tarea skipped: client has no phone', {
+            package_id,
+            client_id: smsData[0].client_id,
+          })
+        } else {
+          const smsParams = getSendSMSviaSNSParams(smsData[0])
+          console.log('SMS Fuerza Tarea publishing to SNS', smsParams)
+          await sendSMSviaSNS(smsParams)
+        }
+      } catch (smsError) {
+        console.log('SMS Fuerza Tarea error', smsError)
+      }
+
+      return response(200, { package_id, status: 'Fuerza Tarea' }, connection)
     }
 
     let data = JSON.parse(event.body)
@@ -237,7 +257,7 @@ module.exports.update = async (event, context) => {
      * Recoger en Traestodo
      * Entregado
      * Entregado con saldo pendiente
-     * Retenido
+     * Fuerza Tarea
      * */
     if (download) {
       const update = await connection.execute(storage.downloadSimple(date, package_id))
@@ -264,8 +284,7 @@ module.exports.update = async (event, context) => {
 module.exports.updateVouchers = async event => {
   const connection = await mysql.createConnection(dbConfig)
   try {
-    const package_id =
-      event.pathParameters && event.pathParameters.package_id ? JSON.parse(event.pathParameters.package_id) : undefined
+    const package_id = event.pathParameters && event.pathParameters.package_id ? JSON.parse(event.pathParameters.package_id) : undefined
 
     if (package_id === undefined) throw new Error('package_id missing')
 
@@ -275,9 +294,7 @@ module.exports.updateVouchers = async event => {
     if (!data.tracking) throw new Error('tracking missing')
     if (!data.guia) throw new Error('guia missing')
 
-    const [packages] = await connection.execute(
-      storage.findPackageForVoucherUpdate(package_id, data.tracking, data.guia)
-    )
+    const [packages] = await connection.execute(storage.findPackageForVoucherUpdate(package_id, data.tracking, data.guia))
 
     if (!packages || !packages.length) {
       throw new Error('Package not found for provided package_id, tracking and guia')
@@ -464,8 +481,8 @@ module.exports.sendPrime = async event => {
         ? JSON.parse(event.body)
         : event.body
       : event.Records
-      ? JSON.parse(event.Records[0].Sns.Message)
-      : null
+        ? JSON.parse(event.Records[0].Sns.Message)
+        : null
 
     console.log(params)
     //subir codigo de los mensajes.
@@ -520,8 +537,8 @@ module.exports.sendSMSTigo = async event => {
         ? JSON.parse(event.body)
         : event.body
       : event.Records
-      ? JSON.parse(event.Records[0].Sns.Message)
-      : null
+        ? JSON.parse(event.Records[0].Sns.Message)
+        : null
 
     const session = await openSession()
 
@@ -537,6 +554,8 @@ module.exports.sendSMSTigo = async event => {
 
     if (action === 'AdminChargeReport') {
       SMS = 'Se generó ingreso de carga de paquetería en el sistema.'
+    } else if (params.data.status === 'Fuerza Tarea') {
+      SMS = `NOW EXPRESS: Paquete con Tracking ${params.data.tracking} retenido por SAT. Para asistencia: bit.ly/3JDt0gl`
     } else if (params.data.status === 'On Hold') {
       SMS = `NOW EXPRESS su paquete con tracking ${params.data.tracking} a pasado a TICKET, por lo que le solicitamos se comunique a nuestro call center 2376-4699 / 5803-2545.`
     } else {
@@ -558,7 +577,7 @@ module.exports.sendSMSTigo = async event => {
       }
     }
 
-    if (SMS.length > 160) {
+    if (params.data.status !== 'Fuerza Tarea' && SMS.length > 160) {
       SMS = SMS.slice(0, 160)
     }
 
