@@ -216,13 +216,15 @@ module.exports.update = async (event, context) => {
     if (package_id === undefined) throw 'pathParameters missing'
 
     if (retenido) {
+      const guia = event.queryStringParameters && event.queryStringParameters.guia != null ? event.queryStringParameters.guia : undefined
+
       const [updateResult] = await connection.execute(storage.updateToRetenido(package_id))
 
       if (!updateResult || updateResult.affectedRows === 0) {
         throw new Error('El paquete no puede marcarse como Fuerza Tarea. No debe estar Entregado ni Registrado.')
       }
 
-      await createLogsviaSNS({ package_id, status: 'Fuerza Tarea' }, 'package-update')
+      await createLogsviaSNS({ package_id, guia, status: 'Fuerza Tarea' }, 'package-update')
 
       try {
         const [smsData] = await connection.execute(storage.getSMSData([package_id]))
@@ -237,6 +239,9 @@ module.exports.update = async (event, context) => {
           })
         } else {
           const smsParams = getSendSMSviaSNSParams(smsData[0])
+          if (guia != null) {
+            smsParams.data.guia = guia
+          }
           console.log('SMS Fuerza Tarea publishing to SNS', smsParams)
           await sendSMSviaSNS(smsParams)
         }
@@ -244,7 +249,7 @@ module.exports.update = async (event, context) => {
         console.log('SMS Fuerza Tarea error', smsError)
       }
 
-      return response(200, { package_id, status: 'Fuerza Tarea' }, connection)
+      return response(200, { package_id, guia, status: 'Fuerza Tarea' }, connection)
     }
 
     let data = JSON.parse(event.body)
@@ -549,66 +554,86 @@ module.exports.sendSMSTigo = async event => {
     //subir codigo de los mensajes.
     if (!params) throw 'no_params'
 
-    let SMS = ''
+    let messages = []
     const action = params.profile[0].contact_name
 
     if (action === 'AdminChargeReport') {
-      SMS = 'Se generó ingreso de carga de paquetería en el sistema.'
+      messages = ['Se generó ingreso de carga de paquetería en el sistema.']
     } else if (params.data.status === 'Fuerza Tarea') {
-      SMS = `NOW EXPRESS: Paquete con Tracking ${params.data.tracking} retenido por SAT. Para asistencia: bit.ly/3JDt0gl`
+      messages = [
+        `NOW EXPRESS: Tu paquete con Tracking: ${params.data.tracking} fue retenido para revisión por SAT (Fuerza de Tarea).`,
+        `Te apoyaremos durante el proceso. Para gestionar la liberación de tu paquete ${params.data.guia && `(guia: ${params.data.guia})`} y recibir asistencia, haz clic aquí: bit.ly/3JDt0gl`,
+      ]
     } else if (params.data.status === 'On Hold') {
-      SMS = `NOW EXPRESS su paquete con tracking ${params.data.tracking} a pasado a TICKET, por lo que le solicitamos se comunique a nuestro call center 2376-4699 / 5803-2545.`
+      messages = [
+        `NOW EXPRESS su paquete con tracking ${params.data.tracking} a pasado a TICKET, por lo que le solicitamos se comunique a nuestro call center 2376-4699 / 5803-2545.`,
+      ]
     } else {
       switch (params.data.client_id.charAt(0)) {
         case 'P':
-          SMS = params.warehouse
-            ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
-            : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`
+          messages = [
+            params.warehouse
+              ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
+              : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`,
+          ]
           break
         case 'T':
-          SMS = params.warehouse
-            ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
-            : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`
+          messages = [
+            params.warehouse
+              ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
+              : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`,
+          ]
           break
         default:
-          SMS = params.warehouse
-            ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
-            : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`
+          messages = [
+            params.warehouse
+              ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
+              : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`,
+          ]
       }
     }
 
-    if (params.data.status !== 'Fuerza Tarea' && SMS.length > 160) {
-      SMS = SMS.slice(0, 160)
+    if (params.data.status !== 'Fuerza Tarea') {
+      messages = messages.map(SMS => (SMS.length > 160 ? SMS.slice(0, 160) : SMS))
     }
 
     let phoneFromRequest = params.profile[0].phone
     const phone = phoneFromRequest.includes('+1') ? phoneFromRequest : `502${params.profile[0].phone}`
 
-    var options = {
-      method: 'POST',
-      url: process.env['URL_TIGO'],
-      headers: {
-        'Content-Type': 'application/json',
-        APIKey: process.env['TIGO_API_KEY'],
-        APISecret: process.env['TIGO_SECRET_KEY'],
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
-        protocol: 'sms',
-        shortcodeId: 'NowExpres',
-        shortcodeType: 'pretty_code',
-        msisdn: phone,
-        priority: 0,
-        body: SMS,
-      }),
-    }
-    let P = await new Promise((resolve, reject) => {
-      request(options, function (error, response) {
-        if (error) reject(error)
-        console.log(response.body)
-        resolve(response.body)
+    const sendTigoSms = body =>
+      new Promise((resolve, reject) => {
+        request(
+          {
+            method: 'POST',
+            url: process.env['URL_TIGO'],
+            headers: {
+              'Content-Type': 'application/json',
+              APIKey: process.env['TIGO_API_KEY'],
+              APISecret: process.env['TIGO_SECRET_KEY'],
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              protocol: 'sms',
+              shortcodeId: 'NowExpres',
+              shortcodeType: 'pretty_code',
+              msisdn: phone,
+              priority: 0,
+              body,
+            }),
+          },
+          function (error, response) {
+            if (error) reject(error)
+            console.log(response.body)
+            resolve(response.body)
+          }
+        )
       })
-    })
+
+    const results = []
+    for (const message of messages) {
+      results.push(await sendTigoSms(message))
+      await new Promise(resolve => setTimeout(resolve, 2000))
+    }
 
     //SEND SMS TO SUPPORT
 
@@ -617,7 +642,7 @@ module.exports.sendSMSTigo = async event => {
       await notifyEmail(AWS, template)
     }
 
-    return response(200, P, null)
+    return response(200, results.length === 1 ? results[0] : results, null)
   } catch (e) {
     console.log(e, 'catch')
     return response(400, e, null)
