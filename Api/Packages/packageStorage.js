@@ -30,7 +30,7 @@ const read = (page, type, id) => {
       break
   }
 
-  const query = `SELECT A.package_id, A.client_id, A.tracking, A.total_a_pagar, A.description, C.contact_name, A.ing_date, A.ent_date, A.status,
+  const query = `SELECT A.package_id, A.client_id, A.tracking, A.total_a_pagar, A.description, C.contact_name, C.client_name, A.ing_date, A.ent_date, A.status,
                  A.weight, A.anticipo, A.total_a_pagar, A.dai, A.cif, A.importe, A.costo_producto, A.tasa, A.guia, A.total_iva, A.poliza
                 FROM  paquetes A
                 LEFT JOIN clientes C on A.client_id = C.client_id
