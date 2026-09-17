@@ -1,5 +1,51 @@
 const accounting = require('accounting-js')
 
+const SEGURO_ITEM_DESCRIPTION = 'Protección de Envío y Gestión Administrativa'
+
+const isSeguroInvoiceItem = item =>
+  item &&
+  (item.description === SEGURO_ITEM_DESCRIPTION ||
+    item.description === 'Seguro' ||
+    item.is_seguro === true)
+
+const roundMoney = value => Math.round((Number(value) || 0) * 100) / 100
+
+const sumIvaDaiFromItems = items => {
+  let dai = 0
+  let iva = 0
+  ;(items || []).forEach(x => {
+    if (isSeguroInvoiceItem(x)) return
+    if (x.package_id && x.cod_service === 1) {
+      dai += Number(x.dai) || 0
+      iva += parseFloat(x.total_iva) || 0
+    }
+  })
+  return { dai, iva, base: dai + iva }
+}
+
+/**
+ * TARIFA_INDIVIDUAL with package flete lines: (IVA + DAI) × fee%
+ * Otherwise (TODO_INCLUIDO, manual, etc.): sub_total × fee% (existing behavior)
+ */
+const calculateSeguroAmount = ({ documentType, items, subTotal, feePercent, feeEnabled }) => {
+  if (!feeEnabled) return 0
+  const percent = Number(feePercent)
+  if (!(percent > 0)) return 0
+
+  let base = 0
+  if (documentType === 'TARIFA_INDIVIDUAL') {
+    const hasCustomsLines = (items || []).some(
+      x => !isSeguroInvoiceItem(x) && x.package_id && x.cod_service === 1
+    )
+    base = hasCustomsLines ? sumIvaDaiFromItems(items).base : Number(subTotal) || 0
+  } else {
+    base = Number(subTotal) || 0
+  }
+
+  if (base <= 0) return 0
+  return roundMoney((base * percent) / 100)
+}
+
 const buildSeguroXmlLine = seguroAmount => {
   const amount = Number(seguroAmount) || 0
   if (amount <= 0) return ''
@@ -7,7 +53,7 @@ const buildSeguroXmlLine = seguroAmount => {
   return `<stdTWS.stdTWSCIt.stdTWSDIt>
                   <TrnLiNum>99</TrnLiNum>
                   <TrnArtCod>E</TrnArtCod>
-                  <TrnArtNom>Seguro</TrnArtNom>
+                  <TrnArtNom>${SEGURO_ITEM_DESCRIPTION}</TrnArtNom>
                   <TrnCan>1</TrnCan>
                   <TrnVUn>${accounting.toFixed(amount, 2)}</TrnVUn>
                   <TrnUniMed>UNI</TrnUniMed>
@@ -31,6 +77,7 @@ const buildXML = (data, moment) => {
   let _dai =0
   let _iva =0
   data.items.forEach( (x)=> {
+    if (isSeguroInvoiceItem(x)) return
     let str = `<stdTWS.stdTWSCIt.stdTWSDIt>
                   <TrnLiNum>${line}</TrnLiNum>
                   <TrnArtCod>${ x.description === 'Desaduanaje' ? 'D' : x.description === 'Flete' ? 'F': 'E'}</TrnArtCod>
@@ -90,7 +137,8 @@ const buildXMLAllInclude = (data, moment) => {
   let oea = ''
   let amount_cuenta_ajena =0
   data.items.forEach( (x)=> {
-  
+    if (isSeguroInvoiceItem(x)) return
+
     if(x.package_id && x.cod_service === 6 ){
       amount_cuenta_ajena += parseFloat(x.amount)
     }
@@ -220,7 +268,7 @@ const buildDevInvoicePdf = (data, sat) => {
   content += pdfLine('------------------------------------------------')
   content += pdfLine(`Subtotal: Q ${money(data.sub_total)}`)
   content += pdfLine(`Descuento: Q ${money(discount)}`)
-  content += pdfLine(`Seguro: Q ${money(seguro)}`)
+  content += pdfLine(`${SEGURO_ITEM_DESCRIPTION}: Q ${money(seguro)}`)
   content += pdfLine(`Total: Q ${money(total - discount + seguro)}`)
   content += 'ET\n'
 
@@ -256,4 +304,7 @@ module.exports = {
   generateCorrelative,
   buildXMLAllInclude,
   buildDevInvoicePdf,
+  calculateSeguroAmount,
+  isSeguroInvoiceItem,
+  SEGURO_ITEM_DESCRIPTION,
 }

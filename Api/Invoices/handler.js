@@ -4,7 +4,7 @@ const moment = require('moment-timezone')
 const isOffline = process.env['IS_OFFLINE']
 const { dbConfig } = require(`${isOffline ? '../..' : '.'}/commons/dbConfig`)
 const { response, wakeUpLambda } = require(`${isOffline ? '../..' : '.'}/commons/utils`)
-const { buildXML, generateCorrelative, buildXMLAllInclude, buildDevInvoicePdf } = require('./functions')
+const { buildXML, generateCorrelative, buildXMLAllInclude, buildDevInvoicePdf, calculateSeguroAmount, isSeguroInvoiceItem, SEGURO_ITEM_DESCRIPTION } = require('./functions')
 const xml2js = require('xml2js')
 const SOAP = require('soap')
 const AWS = require('aws-sdk')
@@ -13,6 +13,39 @@ AWS.config.update({ region: 'us-east-1' })
 const SNS = new AWS.SNS()
 
 let storage = require('./invoiceStorage')
+
+const buildSeguroDetailItem = amount => ({
+  cod_service: 0,
+  package_id: 0,
+  description: SEGURO_ITEM_DESCRIPTION,
+  qty: 1,
+  amount,
+  sub_total: amount,
+  unitario: amount,
+  descuento: 0,
+  item: '',
+  dai: 0,
+  total_iva: 0,
+  total_unitario: amount,
+  is_seguro: true,
+})
+
+const applySeguroToInvoiceData = (data, feePercent, feeEnabled) => {
+  const seguro = calculateSeguroAmount({
+    documentType: data.document_type,
+    items: data.items,
+    subTotal: data.sub_total,
+    feePercent,
+    feeEnabled,
+  })
+
+  data.seguro = seguro
+  data.items = (data.items || []).filter(item => !isSeguroInvoiceItem(item))
+  if (seguro > 0) {
+    data.items = [...data.items, buildSeguroDetailItem(seguro)]
+  }
+  return data
+}
 
 module.exports.create = async (event, context) => {
   const connection = await mysql.createConnection(dbConfig)
@@ -23,6 +56,13 @@ module.exports.create = async (event, context) => {
     if (validation) throw `missing_parameter. ${validation}`
 
     const date = moment().tz('America/Guatemala').format('YYYY-MM-DD')
+
+    const [seguroSettings] = await connection.execute(storage.getSeguroFee())
+    const amountRow = seguroSettings.find(r => r.setting_key === 'seguro_fee')
+    const enabledRow = seguroSettings.find(r => r.setting_key === 'seguro_fee_enabled')
+    const feePercent = amountRow ? parseFloat(amountRow.setting_value) : 0
+    const feeEnabled = enabledRow ? enabledRow.setting_value === '1' : false
+    data = applySeguroToInvoiceData(data, feePercent, feeEnabled)
 
     const correlative = await generateCorrelative(connection, storage.getCorrelative())
     console.log(correlative, 'tt')

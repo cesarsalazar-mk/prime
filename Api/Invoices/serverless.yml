@@ -6,7 +6,7 @@ plugins:
 provider:
   name: aws
   runtime: nodejs20.x
-  stage: ${opt:stage, 'pn'}
+  stage: ${opt:stage, 'dev'}
   region: us-east-1
   environment:
     STAGE: ${self:provider.stage}
@@ -170,8 +170,8 @@ functions:
           authorizer:
             arn: ${file(../../commons/credentials.json):${self:provider.stage}.pool_arn}
       - schedule:
-          name: warmer-schedule-name
-          #name: warmerdev-schedule-name
+          # name: warmer-schedule-name
+          name: warmerdev-schedule-name
           rate: rate(20 minutes)
           enabled: true
           input:
@@ -181,14 +181,14 @@ functions:
     layers:
       - arn:${file(../../commons/credentials.json):${self:provider.stage}.layer}
 
-  #documentCancelSNSdev:
-  documentCancelSNSprod:
+  documentCancelSNSdev:
+  # documentCancelSNSprod:
     handler: handler.annulSNS
     timeout: 900
     events:
       - sns:
-          topicName: annulSNSprod
-          #topicName: annulSNSdev
+          # topicName: annulSNSprod
+          topicName: annulSNSdev
           displayName: annulSNSdev
     layers:
       - arn:${file(../../commons/credentials.json):${self:provider.stage}.layer}
