@@ -24,24 +24,17 @@ const sumIvaDaiFromItems = items => {
 }
 
 /**
- * TARIFA_INDIVIDUAL with package flete lines: (IVA + DAI) × fee%
- * Otherwise (TODO_INCLUIDO, manual, etc.): sub_total × fee% (existing behavior)
+ * Only TARIFA_INDIVIDUAL: (IVA + DAI) × fee%
+ * TODO_INCLUIDO and other types: never applied
  */
-const calculateSeguroAmount = ({ documentType, items, subTotal, feePercent, feeEnabled }) => {
+const calculateSeguroAmount = ({ documentType, items, feePercent, feeEnabled }) => {
   if (!feeEnabled) return 0
+  if (documentType !== 'TARIFA_INDIVIDUAL') return 0
+
   const percent = Number(feePercent)
   if (!(percent > 0)) return 0
 
-  let base = 0
-  if (documentType === 'TARIFA_INDIVIDUAL') {
-    const hasCustomsLines = (items || []).some(
-      x => !isSeguroInvoiceItem(x) && x.package_id && x.cod_service === 1
-    )
-    base = hasCustomsLines ? sumIvaDaiFromItems(items).base : Number(subTotal) || 0
-  } else {
-    base = Number(subTotal) || 0
-  }
-
+  const base = sumIvaDaiFromItems(items).base
   if (base <= 0) return 0
   return roundMoney((base * percent) / 100)
 }

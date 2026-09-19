@@ -34,7 +34,6 @@ const applySeguroToInvoiceData = (data, feePercent, feeEnabled) => {
   const seguro = calculateSeguroAmount({
     documentType: data.document_type,
     items: data.items,
-    subTotal: data.sub_total,
     feePercent,
     feeEnabled,
   })
