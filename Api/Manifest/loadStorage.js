@@ -1,3 +1,6 @@
+const isOffline = process.env['IS_OFFLINE']
+const { feeProteccionSql, feeIfEnabledSql } = require(`${isOffline ? '../..' : '.'}/commons/utils`)
+
 function escapeSql(value) {
   return String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/'/g, "''")
 }
@@ -161,6 +164,7 @@ const updatePackageCharges = (item, data) => `
     tasa = ${sqlNumber(item.tasa)},
     dai = ${sqlNumber(item.dai)},
     total_iva = ${sqlNumber(item.total_iva)},
+    fee_proteccion = ${feeProteccionSql('dai', 'total_iva')},
     cif = ${sqlNumber(item.cif)},
     importe = ${sqlNumber(item.importe)},
     total_a_pagar = ${sqlNumber(item.total_a_pagar)},
@@ -227,7 +231,7 @@ const getSMSData = packageIds => `
     p.description,
     p.ing_date,
     p.status,
-    p.total_a_pagar AS total,
+    p.total_a_pagar + ${feeIfEnabledSql('p.fee_proteccion')} AS total,
     c.client_id,
     c.email,
     c.contact_name,

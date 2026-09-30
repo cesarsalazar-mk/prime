@@ -1,3 +1,6 @@
+const isOffline = process.env['IS_OFFLINE']
+const { feeProteccionSql, feeIfEnabledSql } = require(`${isOffline ? '../..' : '.'}/commons/utils`)
+
 const read = (page, type, id) => {
   let _limit = 25
   let _page = 0
@@ -31,7 +34,7 @@ const read = (page, type, id) => {
   }
 
   const query = `SELECT A.package_id, A.client_id, A.tracking, A.total_a_pagar, A.description, C.contact_name, C.client_name, A.ing_date, A.ent_date, A.status,
-                 A.weight, A.anticipo, A.total_a_pagar, A.dai, A.cif, A.importe, A.costo_producto, A.tasa, A.guia, A.total_iva, A.poliza
+                 A.weight, A.anticipo, A.total_a_pagar, A.dai, A.cif, A.importe, A.costo_producto, A.tasa, A.guia, A.total_iva, A.poliza, A.fee_proteccion
                 FROM  paquetes A
                 LEFT JOIN clientes C on A.client_id = C.client_id
                 ${where}
@@ -94,7 +97,8 @@ const updatePackageTariff = (tariff_code, package_id) => `
     tasa = (SELECT tasa FROM tariffs WHERE id = ${tariff_code}),
     dai = (costo_producto * (SELECT tasa FROM tariffs WHERE id = ${tariff_code})),
     total_iva = ((costo_producto + (costo_producto * (SELECT tasa FROM tariffs WHERE id = ${tariff_code}))) * 0.12),
-    cif = total_iva
+    cif = total_iva,
+    fee_proteccion = ${feeProteccionSql('dai', 'total_iva')}
   WHERE package_id = ${package_id}
 `
 
@@ -127,7 +131,7 @@ const create = (data, newGuiaId) => {
   }
 
   const query = `INSERT INTO paquetes (tracking, client_id, weight, description, category_id, total_a_pagar, ing_date ,status,
-                entregado, cancelado, delivery, create_by, costo_producto, dai, cif, importe, master, poliza, guia, tasa, total_iva,
+                entregado, cancelado, delivery, create_by, costo_producto, dai, cif, importe, master, poliza, guia, tasa, total_iva, fee_proteccion,
                 voucher_bill,
                 voucher_payment)
                   VALUES ('${data.tracking}',
@@ -147,6 +151,7 @@ const create = (data, newGuiaId) => {
                   '${newGuiaId ? newGuiaId : data.guia}',
                   ${data.tasa ? data.tasa : 0.0},
                   ${data.iva ? data.iva : 0.0},
+                  ${feeProteccionSql(data.dai ? data.dai : 0.0, data.iva ? data.iva : 0.0)},
                   ${data.voucher_bill.length > 5 ? "'" + data.voucher_bill + "'" : null},
                   ${data.voucher_payment.length > 5 ? "'" + data.voucher_payment + "'" : null}
                   )`
@@ -156,7 +161,7 @@ const create = (data, newGuiaId) => {
 
 const createByClient = data => {
   const query = `INSERT INTO paquetes (tracking, client_id, weight, description, category_id, total_a_pagar, ing_date ,status,
-                entregado, cancelado, delivery, create_by, costo_producto, dai, cif, importe, master, poliza, tasa, total_iva,
+                entregado, cancelado, delivery, create_by, costo_producto, dai, cif, importe, master, poliza, tasa, total_iva, fee_proteccion,
                 voucher_bill,
                 voucher_payment)
                   VALUES ('${data.tracking}',
@@ -175,6 +180,7 @@ const createByClient = data => {
                   '${data.pn_master.poliza ? data.pn_master.poliza : ''}',                  
                   ${data.tasa ? data.tasa : 0.0},
                   ${data.iva ? data.iva : 0.0},
+                  ${feeProteccionSql(data.dai ? data.dai : 0.0, data.iva ? data.iva : 0.0)},
                   ${data.voucher_bill.length > 5 ? "'" + data.voucher_bill + "'" : null},
                   ${data.voucher_payment.length > 5 ? "'" + data.voucher_payment + "'" : null}
                   )`
@@ -216,7 +222,8 @@ const update = (checkPackage, data, date) => {
                   master = '${data.pn_master.master}',
                   poliza = '${data.pn_master.poliza}',
                   guia = '${data.guia}',
-                  total_iva = ${data.iva}
+                  total_iva = ${data.iva},
+                  fee_proteccion = ${feeProteccionSql('dai', 'total_iva')}
                   WHERE package_id = ${checkPackage.package_id};`
 
   return query
@@ -233,6 +240,7 @@ const updateStatus = (data, package_id, date, status) => {
                   dai=${data.dai},
                   importe=${data.importe},
                   total_iva = ${data.iva},
+                  fee_proteccion = ${feeProteccionSql('dai', 'total_iva')},
                   guia = ${data.guia ? `'${data.guia}'` : null},
                   poliza = '${data.poliza}',
                   costo_producto = ${data.cost},
@@ -354,7 +362,7 @@ const downloadSimple = (date, package_id) => {
 const updateToRetenido = package_id => {
   return `UPDATE paquetes SET status = 'Fuerza Tarea'
           WHERE package_id = ${parseInt(package_id, 10)}
-          AND status NOT IN ('Entregado', 'Registrado')`
+          AND status = 'Recoger en Prime'`
 }
 
 const releaseRetenido = (package_id, status, date) => {
@@ -430,7 +438,7 @@ const getSMSData = packagesIds => {
       p.description,
       p.ing_date,
       p.status,
-      p.total_a_pagar AS total,
+      p.total_a_pagar + ${feeIfEnabledSql('p.fee_proteccion')} AS total,
       c.client_id,
       c.email,
       c.contact_name,
@@ -451,6 +459,7 @@ const packagesBulkUpdate = updateValues => `
     cif = VALUES(total_iva),    
     dai = VALUES(dai),
     total_iva = VALUES(total_iva),
+    fee_proteccion = ${feeProteccionSql('VALUES(dai)', 'VALUES(total_iva)')},
     importe = VALUES(importe),
     total_a_pagar = VALUES(total_a_pagar),
     poliza = VALUES(poliza),
