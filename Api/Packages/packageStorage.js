@@ -357,6 +357,21 @@ const updateToRetenido = package_id => {
           AND status NOT IN ('Entregado', 'Registrado')`
 }
 
+const releaseRetenido = (package_id, status, date) => {
+  const sql =
+    status === 'Entregado'
+      ? `UPDATE paquetes SET ent_date = ?, delivery = '0', entregado = '0', cancelado = 0, anticipo = '0', pending_amount = 0, status = ?
+         WHERE package_id = ? AND status = 'Fuerza Tarea'`
+      : `UPDATE paquetes SET ent_date = ?, status = ?
+         WHERE package_id = ? AND status = 'Fuerza Tarea'`
+  return [sql, [status === 'Entregado' ? date : '0000-00-00', status, parseInt(package_id, 10)]]
+}
+
+const getReleaseData = package_id => [
+  `SELECT package_id, client_id, weight, status, master, poliza, total_a_pagar FROM paquetes WHERE package_id = ? AND status = 'Fuerza Tarea'`,
+  [parseInt(package_id, 10)],
+]
+
 const checkGuide = data => {
   const query = `SELECT * FROM guides WHERE master = '${data.master}' AND poliza = '${data.poliza}'`
   return query
@@ -529,6 +544,8 @@ module.exports = {
   logPackage,
   downloadSimple,
   updateToRetenido,
+  releaseRetenido,
+  getReleaseData,
   checkGuide,
   closeGuide,
   postGuide,

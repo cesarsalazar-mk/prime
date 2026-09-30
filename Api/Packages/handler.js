@@ -200,6 +200,32 @@ module.exports.create = async (event, context) => {
   }
 }
 
+// SMS con el status actual del paquete en DB (sendSMSTigo arma el texto segun status). No falla el request si el SMS falla.
+const sendStatusSMS = async (connection, package_id, guia) => {
+  try {
+    const [smsData] = await connection.execute(storage.getSMSData([package_id]))
+    console.log('SMS status data', smsData)
+
+    if (!smsData || !smsData[0]) {
+      console.log('SMS skipped: no package/client data')
+    } else if (!smsData[0].phone) {
+      console.log('SMS skipped: client has no phone', {
+        package_id,
+        client_id: smsData[0].client_id,
+      })
+    } else {
+      const smsParams = getSendSMSviaSNSParams(smsData[0])
+      if (guia != null) {
+        smsParams.data.guia = guia
+      }
+      console.log('SMS publishing to SNS', smsParams)
+      await sendSMSviaSNS(smsParams)
+    }
+  } catch (smsError) {
+    console.log('SMS error', smsError)
+  }
+}
+
 module.exports.update = async (event, context) => {
   console.log('--UPDATE METHOD--')
 
@@ -226,30 +252,55 @@ module.exports.update = async (event, context) => {
 
       await createLogsviaSNS({ package_id, guia, status: 'Fuerza Tarea' }, 'package-update')
 
-      try {
-        const [smsData] = await connection.execute(storage.getSMSData([package_id]))
-        console.log('SMS Fuerza Tarea data', smsData)
-
-        if (!smsData || !smsData[0]) {
-          console.log('SMS Fuerza Tarea skipped: no package/client data')
-        } else if (!smsData[0].phone) {
-          console.log('SMS Fuerza Tarea skipped: client has no phone', {
-            package_id,
-            client_id: smsData[0].client_id,
-          })
-        } else {
-          const smsParams = getSendSMSviaSNSParams(smsData[0])
-          if (guia != null) {
-            smsParams.data.guia = guia
-          }
-          console.log('SMS Fuerza Tarea publishing to SNS', smsParams)
-          await sendSMSviaSNS(smsParams)
-        }
-      } catch (smsError) {
-        console.log('SMS Fuerza Tarea error', smsError)
-      }
+      await sendStatusSMS(connection, package_id, guia)
 
       return response(200, { package_id, guia, status: 'Fuerza Tarea' }, connection)
+    }
+
+    const releaseStatus = event.queryStringParameters && event.queryStringParameters.releaseStatus
+
+    if (releaseStatus) {
+      if (!['Entregado', 'Recoger en Prime'].includes(releaseStatus)) throw new Error('Estatus no permitido')
+
+      let status = releaseStatus
+      let missing = []
+
+      const [rows] = await connection.execute(...storage.getReleaseData(package_id))
+      if (!rows || !rows[0]) throw new Error('El paquete no esta marcado como Fuerza Tarea.')
+      const pkg = rows[0]
+
+      // Recoger en Prime requiere los datos que pone el flujo warehouse/manifest; si faltan, va a En Warehouse (con confirmacion)
+      if (releaseStatus === 'Recoger en Prime') {
+        const { master, poliza, total_a_pagar } = pkg
+        if (!master || !String(master).trim()) missing.push('Master')
+        if (!poliza || !String(poliza).trim()) missing.push('Poliza')
+        if (!Number(total_a_pagar)) missing.push('Total a pagar')
+
+        if (missing.length) {
+          const confirmWarehouse = event.queryStringParameters.confirmWarehouse === 'true'
+          if (!confirmWarehouse) return response(200, { package_id, missing, needsConfirm: true }, connection)
+          status = 'En Warehouse'
+        }
+      }
+
+      const now = moment().tz('America/Guatemala').format('YYYY-MM-DD')
+      const [updateResult] = await connection.execute(...storage.releaseRetenido(package_id, status, now))
+
+      if (!updateResult || updateResult.affectedRows === 0) {
+        throw new Error('El paquete no esta marcado como Fuerza Tarea.')
+      }
+
+      // Igual que el boton Descargar (update con download=true): registra en accounts_receivable
+      if (status === 'Entregado') {
+        await connection.execute(storage.saveRemaining(pkg, moment().tz('America/Guatemala').format('YYYY-MM-DD hh:mm:ss')))
+      }
+
+      const { userLog } = JSON.parse(event.body || '{}') || {}
+      await createLogsviaSNS({ package_id, status, userLog }, 'package-update')
+
+      if (status === 'Recoger en Prime') await sendStatusSMS(connection, package_id)
+
+      return response(200, { package_id, status, missing }, connection)
     }
 
     let data = JSON.parse(event.body)
@@ -282,7 +333,7 @@ module.exports.update = async (event, context) => {
     return response(200, data, connection)
   } catch (e) {
     console.log(e, 't')
-    return response(400, e, connection)
+    return response(400, e.message ? { error: e.message } : e, connection)
   }
 }
 

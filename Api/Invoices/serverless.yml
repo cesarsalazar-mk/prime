@@ -5,8 +5,8 @@ plugins:
 
 provider:
   name: aws
-  runtime: nodejs20.x
-  stage: ${opt:stage, 'pn'}
+  runtime: nodejs20.x  
+  stage: ${file(../../commons/credentials.json):stage}
   region: us-east-1
   environment:
     STAGE: ${self:provider.stage}
