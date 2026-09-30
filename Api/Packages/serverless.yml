@@ -296,7 +296,7 @@ functions:
 
   sendMessageTigo:
     handler: handler.sendSMSTigo
-    timeout: 30
+    timeout: 60
     events:
       - sns:
           topicName: sms-${self:provider.stage}-tigo

@@ -200,6 +200,32 @@ module.exports.create = async (event, context) => {
   }
 }
 
+// SMS con el status actual del paquete en DB (sendSMSTigo arma el texto segun status). No falla el request si el SMS falla.
+const sendStatusSMS = async (connection, package_id, guia) => {
+  try {
+    const [smsData] = await connection.execute(storage.getSMSData([package_id]))
+    console.log('SMS status data', smsData)
+
+    if (!smsData || !smsData[0]) {
+      console.log('SMS skipped: no package/client data')
+    } else if (!smsData[0].phone) {
+      console.log('SMS skipped: client has no phone', {
+        package_id,
+        client_id: smsData[0].client_id,
+      })
+    } else {
+      const smsParams = getSendSMSviaSNSParams(smsData[0])
+      if (guia != null) {
+        smsParams.data.guia = guia
+      }
+      console.log('SMS publishing to SNS', smsParams)
+      await sendSMSviaSNS(smsParams)
+    }
+  } catch (smsError) {
+    console.log('SMS error', smsError)
+  }
+}
+
 module.exports.update = async (event, context) => {
   console.log('--UPDATE METHOD--')
 
@@ -210,7 +236,72 @@ module.exports.update = async (event, context) => {
     const download =
       event.queryStringParameters && event.queryStringParameters.download ? JSON.parse(event.queryStringParameters.download) : undefined
 
+    const retenido =
+      event.queryStringParameters && event.queryStringParameters.retenido ? JSON.parse(event.queryStringParameters.retenido) : undefined
+
     if (package_id === undefined) throw 'pathParameters missing'
+
+    if (retenido) {
+      const guia = event.queryStringParameters && event.queryStringParameters.guia != null ? event.queryStringParameters.guia : undefined
+
+      const [updateResult] = await connection.execute(storage.updateToRetenido(package_id))
+
+      if (!updateResult || updateResult.affectedRows === 0) {
+        throw new Error('El paquete no puede marcarse como Fuerza Tarea. No debe estar Entregado ni Registrado.')
+      }
+
+      await createLogsviaSNS({ package_id, guia, status: 'Fuerza Tarea' }, 'package-update')
+
+      await sendStatusSMS(connection, package_id, guia)
+
+      return response(200, { package_id, guia, status: 'Fuerza Tarea' }, connection)
+    }
+
+    const releaseStatus = event.queryStringParameters && event.queryStringParameters.releaseStatus
+
+    if (releaseStatus) {
+      if (!['Entregado', 'Recoger en Prime'].includes(releaseStatus)) throw new Error('Estatus no permitido')
+
+      let status = releaseStatus
+      let missing = []
+
+      const [rows] = await connection.execute(...storage.getReleaseData(package_id))
+      if (!rows || !rows[0]) throw new Error('El paquete no esta marcado como Fuerza Tarea.')
+      const pkg = rows[0]
+
+      // Recoger en Prime requiere los datos que pone el flujo warehouse/manifest; si faltan, va a En Warehouse (con confirmacion)
+      if (releaseStatus === 'Recoger en Prime') {
+        const { master, poliza, total_a_pagar } = pkg
+        if (!master || !String(master).trim()) missing.push('Master')
+        if (!poliza || !String(poliza).trim()) missing.push('Poliza')
+        if (!Number(total_a_pagar)) missing.push('Total a pagar')
+
+        if (missing.length) {
+          const confirmWarehouse = event.queryStringParameters.confirmWarehouse === 'true'
+          if (!confirmWarehouse) return response(200, { package_id, missing, needsConfirm: true }, connection)
+          status = 'En Warehouse'
+        }
+      }
+
+      const now = moment().tz('America/Guatemala').format('YYYY-MM-DD')
+      const [updateResult] = await connection.execute(...storage.releaseRetenido(package_id, status, now))
+
+      if (!updateResult || updateResult.affectedRows === 0) {
+        throw new Error('El paquete no esta marcado como Fuerza Tarea.')
+      }
+
+      // Igual que el boton Descargar (update con download=true): registra en accounts_receivable
+      if (status === 'Entregado') {
+        await connection.execute(storage.saveRemaining(pkg, moment().tz('America/Guatemala').format('YYYY-MM-DD hh:mm:ss')))
+      }
+
+      const { userLog } = JSON.parse(event.body || '{}') || {}
+      await createLogsviaSNS({ package_id, status, userLog }, 'package-update')
+
+      if (status === 'Recoger en Prime') await sendStatusSMS(connection, package_id)
+
+      return response(200, { package_id, status, missing }, connection)
+    }
 
     let data = JSON.parse(event.body)
 
@@ -222,6 +313,7 @@ module.exports.update = async (event, context) => {
      * Recoger en Traestodo
      * Entregado
      * Entregado con saldo pendiente
+     * Fuerza Tarea
      * */
     if (download) {
       const update = await connection.execute(storage.downloadSimple(date, package_id))
@@ -241,15 +333,14 @@ module.exports.update = async (event, context) => {
     return response(200, data, connection)
   } catch (e) {
     console.log(e, 't')
-    return response(400, e, connection)
+    return response(400, e.message ? { error: e.message } : e, connection)
   }
 }
 
 module.exports.updateVouchers = async event => {
   const connection = await mysql.createConnection(dbConfig)
   try {
-    const package_id =
-      event.pathParameters && event.pathParameters.package_id ? JSON.parse(event.pathParameters.package_id) : undefined
+    const package_id = event.pathParameters && event.pathParameters.package_id ? JSON.parse(event.pathParameters.package_id) : undefined
 
     if (package_id === undefined) throw new Error('package_id missing')
 
@@ -259,9 +350,7 @@ module.exports.updateVouchers = async event => {
     if (!data.tracking) throw new Error('tracking missing')
     if (!data.guia) throw new Error('guia missing')
 
-    const [packages] = await connection.execute(
-      storage.findPackageForVoucherUpdate(package_id, data.tracking, data.guia)
-    )
+    const [packages] = await connection.execute(storage.findPackageForVoucherUpdate(package_id, data.tracking, data.guia))
 
     if (!packages || !packages.length) {
       throw new Error('Package not found for provided package_id, tracking and guia')
@@ -448,8 +537,8 @@ module.exports.sendPrime = async event => {
         ? JSON.parse(event.body)
         : event.body
       : event.Records
-      ? JSON.parse(event.Records[0].Sns.Message)
-      : null
+        ? JSON.parse(event.Records[0].Sns.Message)
+        : null
 
     console.log(params)
     //subir codigo de los mensajes.
@@ -504,8 +593,8 @@ module.exports.sendSMSTigo = async event => {
         ? JSON.parse(event.body)
         : event.body
       : event.Records
-      ? JSON.parse(event.Records[0].Sns.Message)
-      : null
+        ? JSON.parse(event.Records[0].Sns.Message)
+        : null
 
     const session = await openSession()
 
@@ -516,64 +605,86 @@ module.exports.sendSMSTigo = async event => {
     //subir codigo de los mensajes.
     if (!params) throw 'no_params'
 
-    let SMS = ''
+    let messages = []
     const action = params.profile[0].contact_name
 
     if (action === 'AdminChargeReport') {
-      SMS = 'Se generó ingreso de carga de paquetería en el sistema.'
+      messages = ['Se generó ingreso de carga de paquetería en el sistema.']
+    } else if (params.data.status === 'Fuerza Tarea') {
+      messages = [
+        `NOW EXPRESS: Tu paquete con Tracking: ${params.data.tracking} fue retenido para revisión por SAT (Fuerza de Tarea).`,
+        `Te apoyaremos durante el proceso. Para gestionar la liberación de tu paquete ${params.data.guia && `(guia: ${params.data.guia})`} y recibir asistencia, haz clic aquí: bit.ly/3JDt0gl`,
+      ]
     } else if (params.data.status === 'On Hold') {
-      SMS = `NOW EXPRESS su paquete con tracking ${params.data.tracking} a pasado a TICKET, por lo que le solicitamos se comunique a nuestro call center 2376-4699 / 5803-2545.`
+      messages = [
+        `NOW EXPRESS su paquete con tracking ${params.data.tracking} a pasado a TICKET, por lo que le solicitamos se comunique a nuestro call center 2376-4699 / 5803-2545.`,
+      ]
     } else {
       switch (params.data.client_id.charAt(0)) {
         case 'P':
-          SMS = params.warehouse
-            ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
-            : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`
+          messages = [
+            params.warehouse
+              ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
+              : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`,
+          ]
           break
         case 'T':
-          SMS = params.warehouse
-            ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
-            : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`
+          messages = [
+            params.warehouse
+              ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
+              : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`,
+          ]
           break
         default:
-          SMS = params.warehouse
-            ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
-            : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`
+          messages = [
+            params.warehouse
+              ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
+              : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`,
+          ]
       }
     }
 
-    if (SMS.length > 160) {
-      SMS = SMS.slice(0, 160)
+    if (params.data.status !== 'Fuerza Tarea') {
+      messages = messages.map(SMS => (SMS.length > 160 ? SMS.slice(0, 160) : SMS))
     }
 
     let phoneFromRequest = params.profile[0].phone
     const phone = phoneFromRequest.includes('+1') ? phoneFromRequest : `502${params.profile[0].phone}`
 
-    var options = {
-      method: 'POST',
-      url: process.env['URL_TIGO'],
-      headers: {
-        'Content-Type': 'application/json',
-        APIKey: process.env['TIGO_API_KEY'],
-        APISecret: process.env['TIGO_SECRET_KEY'],
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
-        protocol: 'sms',
-        shortcodeId: 'NowExpres',
-        shortcodeType: 'pretty_code',
-        msisdn: phone,
-        priority: 0,
-        body: SMS,
-      }),
-    }
-    let P = await new Promise((resolve, reject) => {
-      request(options, function (error, response) {
-        if (error) reject(error)
-        console.log(response.body)
-        resolve(response.body)
+    const sendTigoSms = body =>
+      new Promise((resolve, reject) => {
+        request(
+          {
+            method: 'POST',
+            url: process.env['URL_TIGO'],
+            headers: {
+              'Content-Type': 'application/json',
+              APIKey: process.env['TIGO_API_KEY'],
+              APISecret: process.env['TIGO_SECRET_KEY'],
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              protocol: 'sms',
+              shortcodeId: 'NowExpres',
+              shortcodeType: 'pretty_code',
+              msisdn: phone,
+              priority: 0,
+              body,
+            }),
+          },
+          function (error, response) {
+            if (error) reject(error)
+            console.log(response.body)
+            resolve(response.body)
+          }
+        )
       })
-    })
+
+    const results = []
+    for (const message of messages) {
+      results.push(await sendTigoSms(message))
+      await new Promise(resolve => setTimeout(resolve, 2000))
+    }
 
     //SEND SMS TO SUPPORT
 
@@ -582,7 +693,7 @@ module.exports.sendSMSTigo = async event => {
       await notifyEmail(AWS, template)
     }
 
-    return response(200, P, null)
+    return response(200, results.length === 1 ? results[0] : results, null)
   } catch (e) {
     console.log(e, 'catch')
     return response(400, e, null)
