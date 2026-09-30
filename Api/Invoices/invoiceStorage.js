@@ -246,8 +246,13 @@ const getDetailPDF = (id) => {
   return query
 }
 
+const getFeeProteccion = packageIds => [
+  `SELECT package_id, fee_proteccion FROM paquetes WHERE package_id IN (${packageIds.map(() => '?').join(', ')})`,
+  packageIds,
+]
+
 const getDocumentByClient = (id) => {
-  const query = `SELECT description,master,poliza,dai,cif,guia,importe,tracking,weight,client_id,package_id,total_a_pagar,costo_producto,total_iva
+  const query = `SELECT description,master,poliza,dai,cif,guia,importe,tracking,weight,client_id,package_id,total_a_pagar,costo_producto,total_iva,fee_proteccion
                   FROM paquetes
                   WHERE client_id = '${id}' AND ent_date = '0000-00-00' AND status NOT IN ('Registrado','On Hold','Entregado','En Warehouse')`;
   return query
@@ -428,6 +433,7 @@ const upsertSeguroFeeEnabled = (enabled, date, updatedBy) => {
 module.exports = {
   post: create,
   isEmpty,
+  getFeeProteccion,
   createDetail,
   downloadSimple,
   makeRequestApi,

@@ -111,6 +111,7 @@ module.exports.readPackagesByTracking = async event => {
 module.exports.create = async (event, context) => {
   let connection = await mysql.createConnection(dbConfig)
   let actionLog = 'package-create'
+  let smsTotal = null
   try {
     let data = JSON.parse(event.body)
     if (!data.tracking || !data.client_id || !data.weight || !data.description) throw 'missing_parameter.'
@@ -152,7 +153,12 @@ module.exports.create = async (event, context) => {
 
       const [save] = await connection.execute(storage.post(data, newGuiaId))
 
-      if (save) await connection.execute(storage.postDetail(data, save.insertId, date))
+      if (save) {
+        await connection.execute(storage.postDetail(data, save.insertId, date))
+        // total del SMS incluye fee_proteccion
+        const [smsRows] = await connection.execute(storage.getSMSData([save.insertId]))
+        if (smsRows[0]) smsTotal = smsRows[0].total
+      }
     }
 
     const [userData] = await connection.execute(storage.getUserInfo(data.client_id))
@@ -167,7 +173,7 @@ module.exports.create = async (event, context) => {
 
       let payload = {
         profile: userData,
-        data: data,
+        data: smsTotal != null ? { ...data, total: smsTotal } : data,
       }
       const params = {
         Message: JSON.stringify(payload),
@@ -247,7 +253,7 @@ module.exports.update = async (event, context) => {
       const [updateResult] = await connection.execute(storage.updateToRetenido(package_id))
 
       if (!updateResult || updateResult.affectedRows === 0) {
-        throw new Error('El paquete no puede marcarse como Fuerza Tarea. No debe estar Entregado ni Registrado.')
+        throw new Error('Solo paquetes en Recoger en Prime pueden marcarse como Fuerza Tarea.')
       }
 
       await createLogsviaSNS({ package_id, guia, status: 'Fuerza Tarea' }, 'package-update')
@@ -606,6 +612,7 @@ module.exports.sendSMSTigo = async event => {
     if (!params) throw 'no_params'
 
     let messages = []
+    const total = (Number(String(params.data && params.data.total != null ? params.data.total : 0).replace(/[^0-9.-]/g, '')) || 0).toFixed(2)
     const action = params.profile[0].contact_name
 
     if (action === 'AdminChargeReport') {
@@ -625,21 +632,21 @@ module.exports.sendSMSTigo = async event => {
           messages = [
             params.warehouse
               ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
-              : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`,
+              : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`,
           ]
           break
         case 'T':
           messages = [
             params.warehouse
               ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
-              : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`,
+              : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`,
           ]
           break
         default:
           messages = [
             params.warehouse
               ? `NOW EXPRESS, recibimos en MIAMI tu paquete. Tracking: ${params.data.tracking}. Para consultas bit.ly/3JDt0gl`
-              : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${params.data.total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`,
+              : `NOW EXPRESS, Tu paquete esta en Guatemala. Tracking: ${params.data.tracking}, Total: ${total} . Coordina tu entrega aquí: bit.ly/3JDt0gl`,
           ]
       }
     }

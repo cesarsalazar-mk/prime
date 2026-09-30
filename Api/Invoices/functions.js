@@ -10,33 +10,17 @@ const isSeguroInvoiceItem = item =>
 
 const roundMoney = value => Math.round((Number(value) || 0) * 100) / 100
 
-const sumIvaDaiFromItems = items => {
-  let dai = 0
-  let iva = 0
-  ;(items || []).forEach(x => {
-    if (isSeguroInvoiceItem(x)) return
-    if (x.package_id && x.cod_service === 1) {
-      dai += Number(x.dai) || 0
-      iva += parseFloat(x.total_iva) || 0
-    }
-  })
-  return { dai, iva, base: dai + iva }
-}
+// package_id de los items de flete (cod_service 1) que cargan fee_proteccion
+const seguroPackageIds = items =>
+  [...new Set((items || []).filter(x => !isSeguroInvoiceItem(x) && x.package_id && x.cod_service === 1).map(x => Number(x.package_id)))]
 
 /**
- * Only TARIFA_INDIVIDUAL: (IVA + DAI) × fee%
+ * Only TARIFA_INDIVIDUAL: suma de paquetes.fee_proteccion (calculado al llenar dai/iva)
  * TODO_INCLUIDO and other types: never applied
  */
-const calculateSeguroAmount = ({ documentType, items, feePercent, feeEnabled }) => {
-  if (!feeEnabled) return 0
+const calculateSeguroAmount = ({ documentType, feeRows }) => {
   if (documentType !== 'TARIFA_INDIVIDUAL') return 0
-
-  const percent = Number(feePercent)
-  if (!(percent > 0)) return 0
-
-  const base = sumIvaDaiFromItems(items).base
-  if (base <= 0) return 0
-  return roundMoney((base * percent) / 100)
+  return roundMoney((feeRows || []).reduce((sum, r) => sum + (Number(r.fee_proteccion) || 0), 0))
 }
 
 const buildSeguroXmlLine = seguroAmount => {
@@ -298,6 +282,7 @@ module.exports = {
   buildXMLAllInclude,
   buildDevInvoicePdf,
   calculateSeguroAmount,
+  seguroPackageIds,
   isSeguroInvoiceItem,
   SEGURO_ITEM_DESCRIPTION,
 }

@@ -4,7 +4,7 @@ const moment = require('moment-timezone')
 const isOffline = process.env['IS_OFFLINE']
 const { dbConfig } = require(`${isOffline ? '../..' : '.'}/commons/dbConfig`)
 const { response, wakeUpLambda } = require(`${isOffline ? '../..' : '.'}/commons/utils`)
-const { buildXML, generateCorrelative, buildXMLAllInclude, buildDevInvoicePdf, calculateSeguroAmount, isSeguroInvoiceItem, SEGURO_ITEM_DESCRIPTION } = require('./functions')
+const { buildXML, generateCorrelative, buildXMLAllInclude, buildDevInvoicePdf, calculateSeguroAmount, seguroPackageIds, isSeguroInvoiceItem, SEGURO_ITEM_DESCRIPTION } = require('./functions')
 const xml2js = require('xml2js')
 const SOAP = require('soap')
 const AWS = require('aws-sdk')
@@ -30,13 +30,13 @@ const buildSeguroDetailItem = amount => ({
   is_seguro: true,
 })
 
-const applySeguroToInvoiceData = (data, feePercent, feeEnabled) => {
-  const seguro = calculateSeguroAmount({
-    documentType: data.document_type,
-    items: data.items,
-    feePercent,
-    feeEnabled,
-  })
+const applySeguroToInvoiceData = (data, feeRows, feeEnabled) => {
+  const seguro = feeEnabled
+    ? calculateSeguroAmount({
+        documentType: data.document_type,
+        feeRows,
+      })
+    : 0
 
   data.seguro = seguro
   data.items = (data.items || []).filter(item => !isSeguroInvoiceItem(item))
@@ -57,11 +57,12 @@ module.exports.create = async (event, context) => {
     const date = moment().tz('America/Guatemala').format('YYYY-MM-DD')
 
     const [seguroSettings] = await connection.execute(storage.getSeguroFee())
-    const amountRow = seguroSettings.find(r => r.setting_key === 'seguro_fee')
     const enabledRow = seguroSettings.find(r => r.setting_key === 'seguro_fee_enabled')
-    const feePercent = amountRow ? parseFloat(amountRow.setting_value) : 0
     const feeEnabled = enabledRow ? enabledRow.setting_value === '1' : false
-    data = applySeguroToInvoiceData(data, feePercent, feeEnabled)
+
+    const feePackageIds = seguroPackageIds(data.items)
+    const [feeRows] = feeEnabled && feePackageIds.length ? await connection.execute(...storage.getFeeProteccion(feePackageIds)) : [[]]
+    data = applySeguroToInvoiceData(data, feeRows, feeEnabled)
 
     const correlative = await generateCorrelative(connection, storage.getCorrelative())
     console.log(correlative, 'tt')
