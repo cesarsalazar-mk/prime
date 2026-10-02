@@ -81,10 +81,10 @@ let common = {
 
     return escapedBody
   },
-  // SQL para paquetes.fee_proteccion: (dai + iva) * seguro_fee% de settings (0 si no existe). No depende de seguro_fee_enabled.
+  // SQL para paquetes.fee_proteccion: (dai + iva) * seguro_fee% de settings (0 si no existe). 0 si seguro_fee_enabled esta apagado.
   // dai/iva son expresiones SQL (columnas, VALUES(col) o literales).
-  feeProteccionSql: (dai, iva) => `ROUND((IFNULL(${dai}, 0) + IFNULL(${iva}, 0)) *
-    IFNULL((SELECT setting_value FROM settings WHERE setting_key = 'seguro_fee'), 0) / 100, 2)`,
+  feeProteccionSql: (dai, iva) => `IF((SELECT setting_value FROM settings WHERE setting_key = 'seguro_fee_enabled') = '1',
+    ROUND((IFNULL(${dai}, 0) + IFNULL(${iva}, 0)) * IFNULL((SELECT setting_value FROM settings WHERE setting_key = 'seguro_fee'), 0) / 100, 2), 0)`,
   // SQL: fee a cobrar/avisar; solo si seguro_fee_enabled = '1'
   feeIfEnabledSql: fee => `IF((SELECT setting_value FROM settings WHERE setting_key = 'seguro_fee_enabled') = '1', ${fee}, 0)`,
   pad: function (num, size) {

@@ -116,7 +116,7 @@ const getProfile = email => {
 const getPackage = id => {
   const query = `SELECT A.client_id, A.package_id, A.tracking, A.weight, A.ing_date, A.ent_date, A.total_a_pagar, A.anticipo, A.entregado,
                 A.status, A.guia, A.master, A.poliza, A.costo_producto, A.total_iva, A.importe, A.dai, (SELECT name from suppliers where id =  A.supplier_id) AS supplier_name,
-                A.voucher_bill,A.voucher_payment, A.description
+                A.voucher_bill,A.voucher_payment, A.description, A.fee_proteccion
                 FROM paquetes A
                 WHERE A.client_id = '${id}'
                 ORDER BY A.ing_date DESC `
