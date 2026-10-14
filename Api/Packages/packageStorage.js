@@ -13,7 +13,7 @@ const read = (page, type, id) => {
   }
   switch (type) {
     case 'tracking':
-      where = `WHERE tracking like '%${id}%'`
+      where = `WHERE tracking = '%${id}%'`
       break
     case 'client_id':
       where = `WHERE A.client_id = '${id}'`
