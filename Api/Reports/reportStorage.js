@@ -193,7 +193,7 @@ const byMasterTotal = (master, poliza) => {
 }
 
 const getInvoices = (date,store) => {
-  let query = `SELECT client_id,nit,num_serie_sat, num_authorization_sat,num_control,certification_date_date, total_cta, created_at, 
+  let query = `SELECT client_id,nit,num_serie_sat, num_authorization_sat,num_control,certification_date_date, total_cta, d.seguro, created_at,
                   ds.name as status, pt.name as payment, d.observations, d.id as transaction_id
                   FROM documents d 
                   INNER JOIN document_status ds on d.status = ds.id
@@ -219,7 +219,8 @@ const getConciliation = (date,store,type) => {
     d2.store_id,
     d2.total_cta as subtotal_discount ,
     d2.discount,
-    (d2.total_cta - d2.discount) as total_discount
+    (d2.total_cta - d2.discount) as total_discount,
+    d2.seguro
     FROM  documents d2
     INNER JOIN account_reconciliation ar on d2.id = ar.document_id AND ar.status = 'DONE'
     WHERE recorded_at = '${date}'
@@ -240,7 +241,8 @@ const getConciliation = (date,store,type) => {
     d2.store_id,
     d2.total_cta as subtotal_discount ,
     d2.discount,
-    (d2.total_cta - d2.discount) as total_discount
+    (d2.total_cta - d2.discount) as total_discount,
+    d2.seguro
     FROM paquetes p
     INNER JOIN document_details dd on p.package_id = dd.package_id AND dd.cod_service in (${parseInt(store) === 2 ? '5,7' : '1,7'})
     INNER JOIN documents d2 on dd.id_document = d2.id
