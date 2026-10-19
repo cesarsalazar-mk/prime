@@ -85,8 +85,10 @@ let common = {
   // dai/iva son expresiones SQL (columnas, VALUES(col) o literales).
   feeProteccionSql: (dai, iva) => `IF((SELECT setting_value FROM settings WHERE setting_key = 'seguro_fee_enabled') = '1',
     ROUND((IFNULL(${dai}, 0) + IFNULL(${iva}, 0)) * IFNULL((SELECT setting_value FROM settings WHERE setting_key = 'seguro_fee'), 0) / 100, 2), 0)`,
-  // SQL: fee a cobrar/avisar; solo si seguro_fee_enabled = '1'
-  feeIfEnabledSql: fee => `IF((SELECT setting_value FROM settings WHERE setting_key = 'seguro_fee_enabled') = '1', ${fee}, 0)`,
+  // SQL para paquetes.total_a_pagar con fee_proteccion incluido, en UPDATE de paquetes.
+  // Va ANTES de `fee_proteccion = ...` en el SET: total_a_pagar/fee_proteccion sin calificar son los valores viejos.
+  // Si el total recibido es el guardado (ya trae el fee viejo), cambia fee viejo por nuevo; si no (base recalculada), le suma el fee nuevo.
+  totalConFeeSql: (total, fee) => `ROUND(${total} - IF(ABS(${total} - total_a_pagar) < 0.005, fee_proteccion, 0) + ${fee}, 2)`,
   pad: function (num, size) {
     var str = num + ''
     while (str.length < size) str = '0' + str

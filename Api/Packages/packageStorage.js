@@ -1,5 +1,5 @@
 const isOffline = process.env['IS_OFFLINE']
-const { feeProteccionSql, feeIfEnabledSql } = require(`${isOffline ? '../..' : '.'}/commons/utils`)
+const { feeProteccionSql, totalConFeeSql } = require(`${isOffline ? '../..' : '.'}/commons/utils`)
 
 const read = (page, type, id) => {
   let _limit = 25
@@ -98,6 +98,7 @@ const updatePackageTariff = (tariff_code, package_id) => `
     dai = (costo_producto * (SELECT tasa FROM tariffs WHERE id = ${tariff_code})),
     total_iva = ((costo_producto + (costo_producto * (SELECT tasa FROM tariffs WHERE id = ${tariff_code}))) * 0.12),
     cif = total_iva,
+    total_a_pagar = ${totalConFeeSql('total_a_pagar', feeProteccionSql('dai', 'total_iva'))},
     fee_proteccion = ${feeProteccionSql('dai', 'total_iva')}
   WHERE package_id = ${package_id}
 `
@@ -139,7 +140,7 @@ const create = (data, newGuiaId) => {
                   '${data.weight}',
                   '${data.description}',                  
                   ${data.category_id ? data.category_id : 1},
-                  ${data.total},
+                  ROUND(${data.total} + ${feeProteccionSql(data.dai ? data.dai : 0.0, data.iva ? data.iva : 0.0)}, 2),
                   '${data.ing_date}',
                   '${status}',
                   0,0,0,'NEW_SYSTEM',${data.cost ? data.cost : 0},
@@ -169,7 +170,7 @@ const createByClient = data => {
                   '${data.weight}',
                   '${data.description}',                  
                   ${data.category_id ? data.category_id : 1},
-                  ${data.total},
+                  ROUND(${data.total} + ${feeProteccionSql(data.dai ? data.dai : 0.0, data.iva ? data.iva : 0.0)}, 2),
                   '${data.ing_date}',
                   '${data.status}',
                   0,0,0,'NEW_SYSTEM',${data.cost ? data.cost : 0},
@@ -212,7 +213,6 @@ const update = (checkPackage, data, date) => {
                   tracking = '${data.tracking}',
                   description = '${data.description}',
                   status = '${status}',
-                  total_a_pagar = ${data.total},
                   ing_date = '${date}',
                   category_id = ${data.category_id},
                   costo_producto = ${data.cost},
@@ -223,6 +223,7 @@ const update = (checkPackage, data, date) => {
                   poliza = '${data.pn_master.poliza}',
                   guia = '${data.guia}',
                   total_iva = ${data.iva},
+                  total_a_pagar = ${totalConFeeSql(data.total, feeProteccionSql('dai', 'total_iva'))},
                   fee_proteccion = ${feeProteccionSql('dai', 'total_iva')}
                   WHERE package_id = ${checkPackage.package_id};`
 
@@ -232,7 +233,7 @@ const update = (checkPackage, data, date) => {
 const updateStatus = (data, package_id, date, status) => {
   const query = `UPDATE paquetes SET weight = '${data.weight}',
                   tracking = '${data.tracking}',
-                  description = '${data.description}', status = '${status}', total_a_pagar = ${data.total},
+                  description = '${data.description}', status = '${status}',
                   ent_date = '${status === 'Entregado' || status === 'Entregado con saldo pendiente' ? date : data.ent_date}',
                   anticipo = '${data.anticipo ? data.anticipo : '0'}',
                   pending_amount = ${data.pendiente ? data.pendiente : 0},
@@ -240,8 +241,9 @@ const updateStatus = (data, package_id, date, status) => {
                   dai=${data.dai},
                   importe=${data.importe},
                   total_iva = ${data.iva},
+                  total_a_pagar = ${totalConFeeSql(data.total, feeProteccionSql('dai', 'total_iva'))},
                   fee_proteccion = ${feeProteccionSql('dai', 'total_iva')},
-                  guia = ${data.guia ? `'${data.guia}'` : null},
+                  guia =${data.guia ? `'${data.guia}'` : null},
                   poliza = '${data.poliza}',
                   costo_producto = ${data.cost},
                   voucher_bill = '${data.voucher_bill}',
@@ -438,7 +440,7 @@ const getSMSData = packagesIds => {
       p.description,
       p.ing_date,
       p.status,
-      p.total_a_pagar + ${feeIfEnabledSql('p.fee_proteccion')} AS total,
+      p.total_a_pagar AS total,
       c.client_id,
       c.email,
       c.contact_name,
@@ -455,13 +457,13 @@ const packagesBulkUpdate = updateValues => `
   INSERT INTO paquetes (package_id, tasa, cif, dai, total_iva, importe, total_a_pagar, poliza, master, ing_date, status,costo_producto)
   VALUES ${updateValues.join(', ')}
   ON DUPLICATE KEY UPDATE
+    total_a_pagar = ${totalConFeeSql('VALUES(total_a_pagar)', feeProteccionSql('VALUES(dai)', 'VALUES(total_iva)'))},
     tasa = VALUES(tasa),
-    cif = VALUES(total_iva),    
+    cif = VALUES(total_iva),
     dai = VALUES(dai),
     total_iva = VALUES(total_iva),
     fee_proteccion = ${feeProteccionSql('VALUES(dai)', 'VALUES(total_iva)')},
     importe = VALUES(importe),
-    total_a_pagar = VALUES(total_a_pagar),
     poliza = VALUES(poliza),
     master = VALUES(master),
     ing_date_gt = VALUES(ing_date),

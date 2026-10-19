@@ -246,7 +246,7 @@ const buildDevInvoicePdf = (data, sat) => {
   content += pdfLine(`Subtotal: Q ${money(data.sub_total)}`)
   content += pdfLine(`Descuento: Q ${money(discount)}`)
   content += pdfLine(`${SEGURO_ITEM_DESCRIPTION}: Q ${money(seguro)}`)
-  content += pdfLine(`Total: Q ${money(total - discount + seguro)}`)
+  content += pdfLine(`Total: Q ${money(total - discount)}`)
   content += 'ET\n'
 
   const stream = Buffer.from(content, 'latin1')
