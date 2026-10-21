@@ -397,6 +397,43 @@ module.exports.updateVouchers = async event => {
   }
 }
 
+// El precio solo se cambia En Warehouse: despues el manifiesto ya calculo el CIF con costo_producto
+const EDITABLE_STATUS = 'En Warehouse'
+
+module.exports.updateDetails = async event => {
+  const connection = await mysql.createConnection(dbConfig)
+  try {
+    const package_id = event.pathParameters && event.pathParameters.package_id ? parseInt(event.pathParameters.package_id, 10) : NaN
+    if (!package_id) throw new Error('package_id missing')
+
+    const data = JSON.parse(event.body || '{}')
+    const description = String(data.description || '').trim()
+    const cost = Number(data.cost)
+    if (!description) throw new Error('La descripcion es requerida')
+    if (data.cost === null || data.cost === '' || isNaN(cost) || cost < 0) throw new Error('El precio debe ser un numero mayor o igual a 0')
+
+    const [[pkg]] = await connection.execute(...storage.getPackageForDetailsUpdate(package_id))
+    if (!pkg) throw new Error('Paquete no encontrado')
+    // Fuera de En Warehouse el precio que venga se ignora y solo se guarda la descripcion
+    const withPrice = pkg.status === EDITABLE_STATUS
+    const [updateResult] = await connection.execute(...storage.updatePackageDetails(package_id, description, cost, withPrice))
+    if (!updateResult.affectedRows) throw new Error(`El precio solo se puede cambiar con estado ${EDITABLE_STATUS}`)
+
+    const [[updated]] = await connection.execute(...storage.getPackageForDetailsUpdate(package_id))
+
+    //ledr-logs
+    await createLogsviaSNS(
+      { package_id, tracking: pkg.tracking, guia: pkg.guia, withPrice, previous: pkg, updated, userLog: data.userLog },
+      'package-documents-update'
+    )
+
+    return response(200, { package_id, description, cost }, connection)
+  } catch (e) {
+    console.log(e, 'updateDetails')
+    return response(400, { error: e.message || e }, connection)
+  }
+}
+
 module.exports.delete = async (event, context) => {
   const connection = await mysql.createConnection(dbConfig)
   try {
