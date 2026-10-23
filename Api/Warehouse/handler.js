@@ -205,7 +205,7 @@ module.exports.createWarehouseEntry = async event => {
       //ledr-logs
       await createLogsviaSNS(body,"warehouse-update-package-guide-assignment")
 
-      return await response(200, { guia: newGuiaId_ }, connection)
+      return await response(200, { guia: newGuiaId_, package_id: trackingExists[0].package_id }, connection)
 
     }else {
 
@@ -240,7 +240,7 @@ module.exports.createWarehouseEntry = async event => {
         throw new Error("No se ha creado la guia, intente nuevamente")
       }
 
-      await connection.execute(storage.createWarehouseEntry(body, newGuiaId))
+      const [inserted] = await connection.execute(storage.createWarehouseEntry(body, newGuiaId))
       console.log("Guia insertada ",newGuiaId)
 
       const [[profileData]] = await connection.execute(storage.getUserInfo(body.client_id))
@@ -254,7 +254,7 @@ module.exports.createWarehouseEntry = async event => {
       //ledr-logs
       await createLogsviaSNS(body,"warehouse-create-package")
 
-      return await response(200, { guia: newGuiaId }, connection)
+      return await response(200, { guia: newGuiaId, package_id: inserted.insertId }, connection)
     } 
 
     

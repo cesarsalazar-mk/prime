@@ -108,7 +108,8 @@ const detail = package_id => {
                  A.entregado, A.delivery, A.cancelado, A.weight, A.anticipo, A.total_a_pagar,
                  A.dai, A.cif, A.importe, A.costo_producto, A.tasa, A.guia, A.total_iva, A.poliza,
                  A.voucher_bill,
-                 A.voucher_payment
+                 A.voucher_payment,
+                 A.valor_miami
                  FROM paquetes A
                  LEFT JOIN paquetes_detail B on A.package_id = B.package_id
                  LEFT JOIN clientes C on A.client_id = C.client_id
@@ -380,6 +381,22 @@ const getReleaseData = package_id => [
   [parseInt(package_id, 10)],
 ]
 
+const getPackageForDetailsUpdate = package_id => [
+  `SELECT package_id, tracking, guia, status, description, costo_producto, valor_miami, dai, total_iva, importe, total_a_pagar, fee_proteccion
+   FROM paquetes WHERE package_id = ?`,
+  [parseInt(package_id, 10)],
+]
+
+// Precio del paquete en valor_miami (Valor Declarado) y costo_producto (base del CIF que calcula manifiesto).
+// El precio solo se toca En Warehouse (aun sin calculo de manifiesto, no se recalcula nada); en otro estado solo la descripcion.
+const updatePackageDetails = (package_id, description, cost, withPrice) =>
+  withPrice
+    ? [
+        `UPDATE paquetes SET description = ?, valor_miami = ?, costo_producto = ? WHERE package_id = ? AND status = 'En Warehouse'`,
+        [description, cost, cost, parseInt(package_id, 10)],
+      ]
+    : [`UPDATE paquetes SET description = ? WHERE package_id = ?`, [description, parseInt(package_id, 10)]]
+
 const checkGuide = data => {
   const query = `SELECT * FROM guides WHERE master = '${data.master}' AND poliza = '${data.poliza}'`
   return query
@@ -555,6 +572,8 @@ module.exports = {
   updateToRetenido,
   releaseRetenido,
   getReleaseData,
+  getPackageForDetailsUpdate,
+  updatePackageDetails,
   checkGuide,
   closeGuide,
   postGuide,
