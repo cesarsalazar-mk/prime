@@ -59,7 +59,8 @@ module.exports.detail = async (event, context) => {
 module.exports.readPackagesByTracking = async event => {
   const connection = await mysql.createConnection(dbConfig)
   try {
-    const tracking = event.pathParameters && event.pathParameters.tracking
+    // El front manda el tracking con encodeURIComponent (puede traer '/')
+    const tracking = event.pathParameters && event.pathParameters.tracking && decodeURIComponent(event.pathParameters.tracking)
 
     if (!tracking) throw 'pathParameters missing'
 
