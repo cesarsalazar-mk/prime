@@ -124,7 +124,7 @@ const findManifestById = manifest_id => `SELECT manifest_id FROM manifest WHERE 
 
 const findOpenManifest = manifest_id => `SELECT manifest_id FROM manifest WHERE status = 'OPEN'`
 
-const findPackagesByTracking = tracking => `SELECT package_id, manifest_id,guia,client_id FROM paquetes WHERE tracking = '${tracking}'`
+const findPackagesByTracking = tracking => `SELECT package_id, manifest_id,guia,client_id,voucher_bill,voucher_payment FROM paquetes WHERE tracking = '${tracking}'`
 
 const getUserInfo = client_id => `
   SELECT client_id, email, contact_name, client_name, phone FROM clientes WHERE client_id = '${client_id}'

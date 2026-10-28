@@ -205,7 +205,17 @@ module.exports.createWarehouseEntry = async event => {
       //ledr-logs
       await createLogsviaSNS(body,"warehouse-update-package-guide-assignment")
 
-      return await response(200, { guia: newGuiaId_, package_id: trackingExists[0].package_id }, connection)
+      // Vouchers que quedaron en BD (pre-alerta del cliente), para que el front no los pise con la factura PRIME
+      return await response(
+        200,
+        {
+          guia: newGuiaId_,
+          package_id: trackingExists[0].package_id,
+          voucher_bill: body.voucher_bill.length > 5 ? body.voucher_bill : trackingExists[0].voucher_bill,
+          voucher_payment: body.voucher_payment.length > 5 ? body.voucher_payment : trackingExists[0].voucher_payment,
+        },
+        connection
+      )
 
     }else {
 
